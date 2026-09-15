@@ -1,106 +1,22 @@
 import './style.css';
 import { BleClient } from '@capacitor-community/bluetooth-le';
-
-const state = {
-  bms: { connected: false, voltage: null, current: null, soc: null, temperature: null },
-  controller: { connected: false, voltage: null, current: null, speed: null, temperature: null },
-  log: []
-};
-
-const app = document.querySelector('#app');
-
-app.innerHTML = `
-  <main class="app-shell">
-    <header class="topbar">
-      <div><h1>MotoMonitor</h1><p>Vehicle telemetry monitor</p></div>
-      <div class="status-pill" id="app-status">READY</div>
-    </header>
-
-    <section class="hero-card">
-      <div class="speed"><span id="speed">--</span><small>km/h</small></div>
-      <div class="hero-stats">
-        <div><span>Battery</span><strong id="soc">--%</strong></div>
-        <div><span>Power</span><strong id="power">-- W</strong></div>
-        <div><span>Voltage</span><strong id="voltage">-- V</strong></div>
-      </div>
-    </section>
-
-    <section class="grid">
-      <article class="card">
-        <div class="card-head"><h2>BMS</h2><span id="bms-status" class="dot off">OFF</span></div>
-        <div class="metrics">
-          <div><span>Voltage</span><b id="bms-voltage">-- V</b></div>
-          <div><span>Current</span><b id="bms-current">-- A</b></div>
-          <div><span>SOC</span><b id="bms-soc">-- %</b></div>
-          <div><span>Temperature</span><b id="bms-temp">-- °C</b></div>
-        </div>
-        <button id="connect-bms">Connect BMS</button>
-      </article>
-
-      <article class="card">
-        <div class="card-head"><h2>Controller</h2><span id="ctrl-status" class="dot off">OFF</span></div>
-        <div class="metrics">
-          <div><span>Voltage</span><b id="ctrl-voltage">-- V</b></div>
-          <div><span>Current</span><b id="ctrl-current">-- A</b></div>
-          <div><span>Speed</span><b id="ctrl-speed">-- km/h</b></div>
-          <div><span>Temperature</span><b id="ctrl-temp">-- °C</b></div>
-        </div>
-        <button id="connect-controller">Scan Bluetooth</button>
-      </article>
-    </section>
-
-    <section class="card log-card"><div class="card-head"><h2>Event log</h2><button class="secondary" id="clear-log">Clear</button></div><pre id="log">MotoMonitor initialized.</pre></section>
-  </main>`;
-
-function writeLog(message) {
-  const line = `[${new Date().toLocaleTimeString()}] ${message}`;
-  state.log.unshift(line);
-  state.log = state.log.slice(0, 30);
-  document.querySelector('#log').textContent = state.log.join('\n');
-}
-
-function render() {
-  const { bms, controller } = state;
-  const power = Number.isFinite(bms.voltage) && Number.isFinite(bms.current) ? bms.voltage * bms.current : null;
-  document.querySelector('#speed').textContent = controller.speed ?? '--';
-  document.querySelector('#soc').textContent = bms.soc == null ? '--%' : `${Math.round(bms.soc)}%`;
-  document.querySelector('#power').textContent = power == null ? '-- W' : `${Math.round(power)} W`;
-  document.querySelector('#voltage').textContent = bms.voltage == null ? '-- V' : `${bms.voltage.toFixed(1)} V`;
-  document.querySelector('#bms-voltage').textContent = bms.voltage == null ? '-- V' : `${bms.voltage.toFixed(1)} V`;
-  document.querySelector('#bms-current').textContent = bms.current == null ? '-- A' : `${bms.current.toFixed(1)} A`;
-  document.querySelector('#bms-soc').textContent = bms.soc == null ? '-- %' : `${Math.round(bms.soc)} %`;
-  document.querySelector('#bms-temp').textContent = bms.temperature == null ? '-- °C' : `${bms.temperature.toFixed(1)} °C`;
-  document.querySelector('#ctrl-voltage').textContent = controller.voltage == null ? '-- V' : `${controller.voltage.toFixed(1)} V`;
-  document.querySelector('#ctrl-current').textContent = controller.current == null ? '-- A' : `${controller.current.toFixed(1)} A`;
-  document.querySelector('#ctrl-speed').textContent = controller.speed == null ? '-- km/h' : `${controller.speed} km/h`;
-  document.querySelector('#ctrl-temp').textContent = controller.temperature == null ? '-- °C' : `${controller.temperature.toFixed(1)} °C`;
-  setStatus('#bms-status', bms.connected);
-  setStatus('#ctrl-status', controller.connected);
-}
-
-function setStatus(selector, connected) {
-  const el = document.querySelector(selector);
-  el.textContent = connected ? 'ON' : 'OFF';
-  el.className = `dot ${connected ? 'on' : 'off'}`;
-}
-
-async function scanBluetooth() {
-  try {
-    await BleClient.initialize();
-    const device = await BleClient.requestDevice({ allowDuplicates: false, services: [] });
-    writeLog(`Bluetooth device selected: ${device.name || device.deviceId}`);
-    state.controller.connected = true;
-    render();
-  } catch (error) {
-    writeLog(`Bluetooth scan: ${error?.message || error}`);
-  }
-}
-
-document.querySelector('#connect-controller').addEventListener('click', scanBluetooth);
-document.querySelector('#connect-bms').addEventListener('click', () => {
-  writeLog('BMS transport is scaffolded; protocol will be added for the new hardware.');
-});
-document.querySelector('#clear-log').addEventListener('click', () => { state.log = []; render(); document.querySelector('#log').textContent = 'Log cleared.'; });
-
-render();
-writeLog('UI ready. Hardware protocol layer pending.');
+import { Capacitor } from '@capacitor/core';
+const SPP=Capacitor.registerPlugin('BluetoothSerial');
+const BMS_SERVICE='0000ffe0-0000-1000-8000-00805f9b34fb',BMS_CHAR='0000ffe1-0000-1000-8000-00805f9b34fb';
+const st={bms:{connected:false,voltage:null,current:null,soc:null,temp:null,delta:null,cells:[]},ctrl:{connected:false,voltage:null,current:null,rpm:null,temp:null,extTemp:null,status:null,name:''},log:[]};
+const app=document.querySelector('#app');
+app.innerHTML=`<main class="app-shell"><header class="topbar"><div><h1>MotoMonitor</h1><p>JK BMS + VOTOL EM telemetry</p></div><div class="status-pill" id="app-status">READY</div></header><section class="hero-card"><div class="speed"><span id="speed">--</span><small>km/h</small></div><div class="hero-stats"><div><span>Battery</span><strong id="soc">--%</strong></div><div><span>Power</span><strong id="power">-- W</strong></div><div><span>Voltage</span><strong id="voltage">-- V</strong></div></div></section><section class="grid"><article class="card"><div class="card-head"><h2>JK BMS</h2><span id="bms-status" class="dot off">OFF</span></div><div class="device-name" id="bms-name">Not connected</div><div class="metrics"><div><span>Voltage</span><b id="bms-v">-- V</b></div><div><span>Current</span><b id="bms-i">-- A</b></div><div><span>SOC</span><b id="bms-s">-- %</b></div><div><span>Temperature</span><b id="bms-t">-- °C</b></div><div><span>Cell Δ</span><b id="bms-d">-- V</b></div><div><span>Cells</span><b id="bms-c">--</b></div></div><button id="connect-bms">Connect JK BMS</button></article><article class="card"><div class="card-head"><h2>VOTOL Controller</h2><span id="ctrl-status" class="dot off">OFF</span></div><div class="device-name" id="ctrl-name">Not connected</div><div class="metrics"><div><span>Voltage</span><b id="ctrl-v">-- V</b></div><div><span>Current</span><b id="ctrl-i">-- A</b></div><div><span>RPM</span><b id="ctrl-r">--</b></div><div><span>Controller</span><b id="ctrl-t">-- °C</b></div><div><span>External</span><b id="ctrl-e">-- °C</b></div><div><span>Status</span><b id="ctrl-s">--</b></div></div><button id="connect-controller">Connect VOTOL SPP</button></article></section><section class="card log-card"><div class="card-head"><h2>Event log</h2><button class="secondary" id="clear-log">Clear</button></div><pre id="log">MotoMonitor initialized.</pre></section></main>`;
+function log(x){st.log.unshift(`[${new Date().toLocaleTimeString()}] ${x}`);st.log=st.log.slice(0,50);document.querySelector('#log').textContent=st.log.join('\n')}
+function n(x,d=1){return Number.isFinite(x)?x.toFixed(d):'--'}
+function render(){const b=st.bms,c=st.ctrl,p=Number.isFinite(b.voltage)&&Number.isFinite(b.current)?Math.abs(b.voltage*b.current):null;document.querySelector('#speed').textContent=c.rpm==null?'--':c.rpm;document.querySelector('#soc').textContent=b.soc==null?'--%':`${Math.round(b.soc)}%`;document.querySelector('#power').textContent=p==null?'-- W':`${Math.round(p)} W`;document.querySelector('#voltage').textContent=b.voltage==null?'-- V':`${b.voltage.toFixed(1)} V`;document.querySelector('#bms-v').textContent=b.voltage==null?'-- V':`${b.voltage.toFixed(1)} V`;document.querySelector('#bms-i').textContent=b.current==null?'-- A':`${b.current.toFixed(1)} A`;document.querySelector('#bms-s').textContent=b.soc==null?'-- %':`${Math.round(b.soc)} %`;document.querySelector('#bms-t').textContent=n(b.temp)+' °C';document.querySelector('#bms-d').textContent=b.delta==null?'-- V':`${b.delta.toFixed(3)} V`;document.querySelector('#bms-c').textContent=b.cells.length?`${b.cells.length}S`:'--';document.querySelector('#bms-name').textContent=b.name||'Not connected';document.querySelector('#ctrl-v').textContent=c.voltage==null?'-- V':`${c.voltage.toFixed(1)} V`;document.querySelector('#ctrl-i').textContent=c.current==null?'-- A':`${c.current.toFixed(1)} A`;document.querySelector('#ctrl-r').textContent=c.rpm==null?'--':c.rpm;document.querySelector('#ctrl-t').textContent=n(c.temp)+' °C';document.querySelector('#ctrl-e').textContent=n(c.extTemp)+' °C';document.querySelector('#ctrl-s').textContent=c.status??'--';document.querySelector('#ctrl-name').textContent=c.name||'Not connected';for(const [id,on] of [['#bms-status',b.connected],['#ctrl-status',c.connected]]){const e=document.querySelector(id);e.textContent=on?'ON':'OFF';e.className=`dot ${on?'on':'off'}`}document.querySelector('#app-status').textContent=b.connected||c.connected?'LIVE':'READY'}
+const u16=(b,i)=>b[i]|b[i+1]<<8;const i32=(b,i)=>{const v=(b[i]|b[i+1]<<8|b[i+2]<<16|b[i+3]<<24)>>>0;return v>2147483647?v-4294967296:v};
+let jb=new Uint8Array(0);
+function add(a,b){const x=new Uint8Array(a.length+b.length);x.set(a);x.set(b,a.length);return x}
+function parse55(b){if(b.length<46||b[0]!=85||b[1]!=170||b[2]!=235||b[3]!=144)return;const cells=[];for(let i=0;i<32&&6+2*i+1<b.length;i++){const v=u16(b,6+2*i)/1000;if(v>1&&v<5)cells.push(v);else if(i>=20)break}if(cells.length){st.bms.cells=cells;st.bms.voltage=cells.reduce((a,v)=>a+v,0);st.bms.delta=Math.max(...cells)-Math.min(...cells)}}
+function parse57(b){if(b.length<20||b[0]!=78||b[1]!=87)return;let p=10,end=b.length-4;while(p<end){const t=b[p++];if(t==121&&p<end){const z=b[p++],cells=[];for(let i=0;i<z/2&&p+1<end;i++,p+=2){const v=u16(b,p)/1000;if(v>1&&v<5)cells.push(v)}if(cells.length){st.bms.cells=cells;st.bms.delta=Math.max(...cells)-Math.min(...cells)}continue}if(t==131&&p+3<end){st.bms.voltage=((b[p]<<24)|(b[p+1]<<16)|(b[p+2]<<8)|b[p+3])/1000;p+=4;continue}if(t==132&&p+3<end){st.bms.current=i32(b,p)/1000;p+=4;continue}if(t==133&&p<end){st.bms.soc=b[p++];continue}if(t>=128&&t<=130&&p+1<end){const v=(b[p]<<8)|b[p+1];st.bms.temp=(v&32768)?v-65536:v;p+=2;continue}if([134,138,139,140,142].includes(t)){p++;continue}if([144,145,146,147,148,149,150].includes(t)||t==135){p+=2;continue}if(t==137||t==170)p+=4}}
+function jkData(data){jb=add(jb,Uint8Array.from(data));while(jb.length>=4){let s=-1;for(let i=0;i<jb.length-1;i++)if((jb[i]==85&&jb[i+1]==170)||(jb[i]==78&&jb[i+1]==87)){s=i;break}if(s<0){jb=jb.slice(-3);return}if(s)jb=jb.slice(s);if(jb[0]==85){if(jb.length<150)return;parse55(jb.slice(0,150));jb=jb.slice(150)}else{const len=jb[2]<<8|jb[3];if(len<20||jb.length<len)return;parse57(jb.slice(0,len));jb=jb.slice(len)}render()}}
+async function connectBms(){try{if(st.bms.connected){await BleClient.disconnect(st.bms.id);st.bms.connected=false;render();return}log('JK BMS: opening BLE picker...');await BleClient.initialize();const d=await BleClient.requestDevice({services:[BMS_SERVICE],optionalServices:[BMS_SERVICE]});st.bms.id=d.deviceId;st.bms.name=d.name||d.deviceId;await BleClient.connect(d.deviceId,()=>{st.bms.connected=false;render();log('JK BMS disconnected')});await BleClient.startNotifications(d.deviceId,BMS_SERVICE,BMS_CHAR,v=>jkData(Array.from(new Uint8Array(v.buffer,v.byteOffset,v.byteLength))));st.bms.connected=true;jb=new Uint8Array(0);render();log(`JK BMS connected: ${st.bms.name}`);for(const cmd of [0x96,0x95]){const q=new Uint8Array(20);q.set([170,85,144,235,cmd]);let sum=0;for(let i=0;i<19;i++)sum=(sum+q[i])&255;q[19]=sum;await BleClient.writeWithoutResponse(d.deviceId,BMS_SERVICE,BMS_CHAR,new DataView(q.buffer)).catch(()=>{});await new Promise(r=>setTimeout(r,300))}}catch(e){st.bms.connected=false;render();log(`JK BMS error: ${e?.message||e}`)}}
+const SHOW=[201,20,13,83,72,79,87,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,211,13];let vb=new Uint8Array(0),poll;
+function votolData(data){vb=add(vb,Uint8Array.from(data));while(vb.length>=24){let s=-1;for(let i=0;i<=vb.length-24;i++)if(vb[i]==192&&vb[i+1]==20){s=i;break}if(s<0){vb=vb.slice(-23);return}if(s)vb=vb.slice(s);const b=vb.slice(0,24);const v=(b[5]<<8|b[6])/10;let ir=b[7]<<8|b[8];if(ir&32768)ir-=65536;const rpm=b[14]<<8|b[15],ct=b[16]-50,et=b[17]-50,states=['IDLE','INIT','START','RUN','STOP','BRAKE','WAIT','FAULT'];st.ctrl.voltage=v;st.ctrl.current=ir/10;st.ctrl.rpm=rpm;st.ctrl.temp=ct;st.ctrl.extTemp=et;st.ctrl.status=states[b[21]]||`ST:${b[21]}`;render();vb=vb.slice(24)}}
+async function connectController(){try{if(st.ctrl.connected){if(poll)clearInterval(poll);poll=null;await SPP.disconnect().catch(()=>{});st.ctrl.connected=false;render();return}if(Capacitor.getPlatform()!=='android')throw Error('VOTOL SPP is available in the Android APK');const r=await SPP.list(),ds=r?.devices||[];if(!ds.length)throw Error('No bonded Bluetooth device. Pair JDY-31-SPP first.');const d=ds.find(x=>/VOTOL|JDY|BT05|BT24/i.test(x.name||''))||ds[0];st.ctrl.name=d.name||d.address;log(`VOTOL SPP: connecting to ${st.ctrl.name}...`);await SPP.addListener('rawData',e=>votolData(e.data||[]));await SPP.addListener('status',e=>{st.ctrl.connected=!!e.connected;if(e.name)st.ctrl.name=e.name;render()});await SPP.connectInsecure({id:d.id||d.address});st.ctrl.connected=true;render();log(`VOTOL SPP connected: ${st.ctrl.name}. SHOW polling active.`);await SPP.write({data:SHOW});poll=setInterval(()=>SPP.write({data:SHOW}).catch(()=>{}),200)}catch(e){st.ctrl.connected=false;render();log(`VOTOL SPP error: ${e?.message||e}`)}}
+document.querySelector('#connect-bms').onclick=connectBms;document.querySelector('#connect-controller').onclick=connectController;document.querySelector('#clear-log').onclick=()=>{st.log=[];document.querySelector('#log').textContent='Log cleared.'};render();log('UI ready. JK BLE + VOTOL Classic SPP loaded.');
