@@ -46,6 +46,9 @@ jobs:
       - name: Create Android project
         run: npx cap add android
 
+      - name: Inject native Bluetooth transport
+        run: node scripts/patch-android.mjs
+
       - name: Sync Capacitor
         run: npx cap sync android
 
