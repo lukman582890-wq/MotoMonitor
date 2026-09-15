@@ -39,6 +39,8 @@ jobs:
         run: node scripts/fix-dashboard-script.mjs
       - name: Patch dashboard UI
         run: node scripts/patch-dashboard.mjs
+      - name: Patch native GPS runtime
+        run: node scripts/patch-gps-native.mjs
       - name: Build web app
         run: npm run build
       - name: Create Android project
