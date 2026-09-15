@@ -47,6 +47,8 @@ jobs:
         run: npx cap add android
       - name: Inject native Bluetooth transport
         run: node scripts/patch-android.mjs
+      - name: Verify GPS integration
+        run: node scripts/verify-gps-build.mjs
       - name: Sync Capacitor
         run: npx cap sync android
       - name: Build debug APK
