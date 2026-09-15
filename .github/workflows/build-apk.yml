@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Patch JK BMS BLE picker
+        run: node scripts/patch-bms-picker.mjs
+
       - name: Build web app
         run: npm run build
 
