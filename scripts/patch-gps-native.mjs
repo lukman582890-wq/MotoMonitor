@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+const file='src/main.js';
+let s=fs.readFileSync(file,'utf8');
+const marker="document.querySelector('#map-center').onclick=";
+const start=s.indexOf("(async()=>{try{await __loadLeaflet();");
+const end=s.indexOf("setInterval(render,1000);render();",start);
+if(start<0||end<0) throw new Error('GPS startup block not found');
+const replacement=`async function __startGpsNative(){\n  try{\n    const __Geo=Capacitor.registerPlugin('Geolocation');\n    const __perm=await __Geo.requestPermissions({permissions:['location']});\n    if(__perm.location!=='granted'){__gpsError({message:'Location permission denied'});return}\n    try{\n      const __p=await __Geo.getCurrentPosition({enableHighAccuracy:true,timeout:20000,maximumAge:0});\n      __onGps(__p);\n    }catch(e){__gpsError(e)}\n    await __Geo.watchPosition({enableHighAccuracy:true,timeout:20000,maximumAge:3000},(p,e)=>{if(e){__gpsError(e);return}if(p)__onGps(p)});\n    log('GPS: native location tracking started.');\n  }catch(e){__gpsError(e)}\n}\n(async()=>{\n  try{await __loadLeaflet();__map=__makeMap('gps-map');__mapBig=__makeMap('gps-map-big');setTimeout(()=>{__map?.invalidateSize();__mapBig?.invalidateSize()},300)}catch(e){log('Map: '+(e?.message||e))}\n  await __startGpsNative();\n  render();\n})();\n`;
+s=s.slice(0,start)+replacement+s.slice(end+"setInterval(render,1000);render();".length);
+fs.writeFileSync(file,s);
+console.log('Native Capacitor GPS runtime patch applied.');
