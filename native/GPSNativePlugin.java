@@ -33,6 +33,8 @@ public class GPSNativePlugin extends Plugin {
     private LocationManager locationManager;
     private LocationListener locationListener;
     private boolean tracking = false;
+    private long lastFixAt = 0L;
+    private String lastProvider = "";
 
     @Override
     public void load() {
@@ -48,32 +50,61 @@ public class GPSNativePlugin extends Plugin {
     @PluginMethod
     public void start(PluginCall call) {
         if (!hasLocationPermission()) {
+            emitStatus("permission_required");
             requestPermissionForAlias("location", call, "permissionCallback");
             return;
         }
-        try { startTracking(); call.resolve(); }
-        catch (Exception e) { call.reject("GPS start failed: " + e.getMessage()); }
+        try {
+            startTracking();
+            call.resolve();
+        } catch (SecurityException e) {
+            emitStatus("permission_error");
+            call.reject("GPS permission error: " + e.getMessage());
+        } catch (Exception e) {
+            emitStatus("start_error:" + safeMessage(e));
+            call.reject("GPS start failed: " + safeMessage(e));
+        }
     }
 
     @PermissionCallback
     private void permissionCallback(PluginCall call) {
-        if (!hasLocationPermission()) { call.reject("Location permission denied"); return; }
-        try { startTracking(); call.resolve(); }
-        catch (Exception e) { call.reject("GPS start failed: " + e.getMessage()); }
+        if (!hasLocationPermission()) {
+            emitStatus("permission_denied");
+            call.reject("Location permission denied");
+            return;
+        }
+        try {
+            startTracking();
+            call.resolve();
+        } catch (SecurityException e) {
+            emitStatus("permission_error");
+            call.reject("GPS permission error: " + e.getMessage());
+        } catch (Exception e) {
+            emitStatus("start_error:" + safeMessage(e));
+            call.reject("GPS start failed: " + safeMessage(e));
+        }
     }
 
     @PluginMethod
-    public void stop(PluginCall call) { stopTracking(); call.resolve(); }
+    public void stop(PluginCall call) {
+        stopTracking();
+        call.resolve();
+    }
 
     @PluginMethod
     public void status(PluginCall call) {
         JSObject out = new JSObject();
         out.put("permission", hasLocationPermission() ? "granted" : "denied");
         out.put("locationEnabled", isLocationEnabled());
+        out.put("gpsExists", hasProvider(LocationManager.GPS_PROVIDER));
+        out.put("networkExists", hasProvider(LocationManager.NETWORK_PROVIDER));
         out.put("gpsEnabled", isProviderEnabled(LocationManager.GPS_PROVIDER));
         out.put("networkEnabled", isProviderEnabled(LocationManager.NETWORK_PROVIDER));
+        out.put("fusedExists", Build.VERSION.SDK_INT >= 31 && hasProvider(LocationManager.FUSED_PROVIDER));
         out.put("fusedEnabled", Build.VERSION.SDK_INT >= 31 && isProviderEnabled(LocationManager.FUSED_PROVIDER));
         out.put("tracking", tracking);
+        out.put("lastFixAt", lastFixAt);
+        out.put("lastProvider", lastProvider);
         call.resolve(out);
     }
 
@@ -82,8 +113,13 @@ public class GPSNativePlugin extends Plugin {
             || androidx.core.content.ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
+    private boolean hasProvider(String provider) {
+        try { return locationManager != null && locationManager.hasProvider(provider); }
+        catch (Exception e) { return false; }
+    }
+
     private boolean isProviderEnabled(String provider) {
-        try { return locationManager != null && locationManager.isProviderEnabled(provider); }
+        try { return locationManager != null && hasProvider(provider) && locationManager.isProviderEnabled(provider); }
         catch (Exception e) { return false; }
     }
 
@@ -101,26 +137,37 @@ public class GPSNativePlugin extends Plugin {
         }
         if (tracking) return;
 
-        getLastKnown(LocationManager.GPS_PROVIDER);
-        getLastKnown(LocationManager.NETWORK_PROVIDER);
-        if (Build.VERSION.SDK_INT >= 31) getLastKnown(LocationManager.FUSED_PROVIDER);
-
         boolean registered = false;
         if (isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper());
+            requestProvider(LocationManager.GPS_PROVIDER);
             registered = true;
         }
         if (isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper());
+            requestProvider(LocationManager.NETWORK_PROVIDER);
             registered = true;
         }
         if (Build.VERSION.SDK_INT >= 31 && isProviderEnabled(LocationManager.FUSED_PROVIDER)) {
-            locationManager.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper());
+            requestProvider(LocationManager.FUSED_PROVIDER);
             registered = true;
         }
         if (!registered) throw new IllegalStateException("No Android location provider is enabled");
         tracking = true;
         emitStatus("tracking_started");
+        emitStatus("waiting_for_fix");
+    }
+
+    private void requestProvider(String provider) {
+        if (Build.VERSION.SDK_INT >= 30) {
+            locationManager.requestLocationUpdates(provider, 1000L, 0f, getContext().getMainExecutor(), locationListener);
+            try {
+                locationManager.getCurrentLocation(provider, null, getContext().getMainExecutor(), location -> {
+                    if (location != null) emitLocation(location);
+                });
+            } catch (Exception ignored) {}
+        } else {
+            locationManager.requestLocationUpdates(provider, 1000L, 0f, locationListener, Looper.getMainLooper());
+            getLastKnown(provider);
+        }
     }
 
     private void getLastKnown(String provider) {
@@ -136,22 +183,24 @@ public class GPSNativePlugin extends Plugin {
             try { locationManager.removeUpdates(locationListener); } catch (Exception ignored) {}
         }
         tracking = false;
+        emitStatus("tracking_stopped");
     }
 
     private void emitLocation(Location location) {
+        lastFixAt = System.currentTimeMillis();
+        lastProvider = location.getProvider() == null ? "unknown" : location.getProvider();
         JSObject data = new JSObject();
         data.put("latitude", location.getLatitude());
         data.put("longitude", location.getLongitude());
-        data.put("accuracy", location.hasAccuracy() ? location.getAccuracy() : JSONObjectNull());
-        data.put("altitude", location.hasAltitude() ? location.getAltitude() : JSONObjectNull());
-        data.put("speed", location.hasSpeed() ? location.getSpeed() : JSONObjectNull());
-        data.put("bearing", location.hasBearing() ? location.getBearing() : JSONObjectNull());
+        data.put("accuracy", location.hasAccuracy() ? location.getAccuracy() : org.json.JSONObject.NULL);
+        data.put("altitude", location.hasAltitude() ? location.getAltitude() : org.json.JSONObject.NULL);
+        data.put("speed", location.hasSpeed() ? location.getSpeed() : org.json.JSONObject.NULL);
+        data.put("bearing", location.hasBearing() ? location.getBearing() : org.json.JSONObject.NULL);
         data.put("timestamp", location.getTime());
-        data.put("provider", location.getProvider());
+        data.put("provider", lastProvider);
         notifyListeners("location", data);
+        emitStatus("fix:" + lastProvider);
     }
-
-    private Object JSONObjectNull() { return org.json.JSONObject.NULL; }
 
     private void emitStatus(String status) {
         JSObject data = new JSObject();
@@ -159,6 +208,14 @@ public class GPSNativePlugin extends Plugin {
         notifyListeners("status", data);
     }
 
+    private String safeMessage(Exception e) {
+        String msg = e.getMessage();
+        return msg == null || msg.isEmpty() ? e.getClass().getSimpleName() : msg;
+    }
+
     @Override
-    protected void handleOnDestroy() { stopTracking(); super.handleOnDestroy(); }
+    protected void handleOnDestroy() {
+        stopTracking();
+        super.handleOnDestroy();
+    }
 }
