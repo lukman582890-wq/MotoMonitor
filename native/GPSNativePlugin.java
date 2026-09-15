@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 
@@ -37,15 +38,9 @@ public class GPSNativePlugin extends Plugin {
     public void load() {
         locationManager = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
         locationListener = new LocationListener() {
-            @Override public void onLocationChanged(@NonNull Location location) {
-                emitLocation(location);
-            }
-            @Override public void onProviderEnabled(@NonNull String provider) {
-                emitStatus("provider_enabled:" + provider);
-            }
-            @Override public void onProviderDisabled(@NonNull String provider) {
-                emitStatus("provider_disabled:" + provider);
-            }
+            @Override public void onLocationChanged(@NonNull Location location) { emitLocation(location); }
+            @Override public void onProviderEnabled(@NonNull String provider) { emitStatus("provider_enabled:" + provider); }
+            @Override public void onProviderDisabled(@NonNull String provider) { emitStatus("provider_disabled:" + provider); }
             @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
         };
     }
@@ -56,33 +51,19 @@ public class GPSNativePlugin extends Plugin {
             requestPermissionForAlias("location", call, "permissionCallback");
             return;
         }
-        try {
-            startTracking();
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("GPS start failed: " + e.getMessage());
-        }
+        try { startTracking(); call.resolve(); }
+        catch (Exception e) { call.reject("GPS start failed: " + e.getMessage()); }
     }
 
     @PermissionCallback
     private void permissionCallback(PluginCall call) {
-        if (!hasLocationPermission()) {
-            call.reject("Location permission denied");
-            return;
-        }
-        try {
-            startTracking();
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("GPS start failed: " + e.getMessage());
-        }
+        if (!hasLocationPermission()) { call.reject("Location permission denied"); return; }
+        try { startTracking(); call.resolve(); }
+        catch (Exception e) { call.reject("GPS start failed: " + e.getMessage()); }
     }
 
     @PluginMethod
-    public void stop(PluginCall call) {
-        stopTracking();
-        call.resolve();
-    }
+    public void stop(PluginCall call) { stopTracking(); call.resolve(); }
 
     @PluginMethod
     public void status(PluginCall call) {
@@ -91,6 +72,7 @@ public class GPSNativePlugin extends Plugin {
         out.put("locationEnabled", isLocationEnabled());
         out.put("gpsEnabled", isProviderEnabled(LocationManager.GPS_PROVIDER));
         out.put("networkEnabled", isProviderEnabled(LocationManager.NETWORK_PROVIDER));
+        out.put("fusedEnabled", Build.VERSION.SDK_INT >= 31 && isProviderEnabled(LocationManager.FUSED_PROVIDER));
         out.put("tracking", tracking);
         call.resolve(out);
     }
@@ -107,7 +89,7 @@ public class GPSNativePlugin extends Plugin {
 
     private boolean isLocationEnabled() {
         if (locationManager == null) return false;
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) return locationManager.isLocationEnabled();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return locationManager.isLocationEnabled();
         return isProviderEnabled(LocationManager.GPS_PROVIDER) || isProviderEnabled(LocationManager.NETWORK_PROVIDER);
     }
 
@@ -119,23 +101,34 @@ public class GPSNativePlugin extends Plugin {
         }
         if (tracking) return;
 
-        try {
-            Location lastGps = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if (lastGps != null) emitLocation(lastGps);
-        } catch (SecurityException ignored) {}
-        try {
-            Location lastNetwork = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-            if (lastNetwork != null) emitLocation(lastNetwork);
-        } catch (SecurityException ignored) {}
+        getLastKnown(LocationManager.GPS_PROVIDER);
+        getLastKnown(LocationManager.NETWORK_PROVIDER);
+        if (Build.VERSION.SDK_INT >= 31) getLastKnown(LocationManager.FUSED_PROVIDER);
 
+        boolean registered = false;
         if (isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper());
+            registered = true;
         }
         if (isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
             locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper());
+            registered = true;
         }
+        if (Build.VERSION.SDK_INT >= 31 && isProviderEnabled(LocationManager.FUSED_PROVIDER)) {
+            locationManager.requestLocationUpdates(LocationManager.FUSED_PROVIDER, 1000L, 0f, locationListener, Looper.getMainLooper());
+            registered = true;
+        }
+        if (!registered) throw new IllegalStateException("No Android location provider is enabled");
         tracking = true;
         emitStatus("tracking_started");
+    }
+
+    private void getLastKnown(String provider) {
+        if (!isProviderEnabled(provider)) return;
+        try {
+            Location last = locationManager.getLastKnownLocation(provider);
+            if (last != null) emitLocation(last);
+        } catch (SecurityException ignored) {}
     }
 
     private void stopTracking() {
@@ -167,8 +160,5 @@ public class GPSNativePlugin extends Plugin {
     }
 
     @Override
-    protected void handleOnDestroy() {
-        stopTracking();
-        super.handleOnDestroy();
-    }
+    protected void handleOnDestroy() { stopTracking(); super.handleOnDestroy(); }
 }
