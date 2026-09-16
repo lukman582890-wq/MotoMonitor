@@ -16,7 +16,6 @@ const replacement=`function parse55(b){
   st.bms.cells=cells;
   const sum=cells.reduce((a,v)=>a+v,0);
   st.bms.delta=Math.max(...cells)-Math.min(...cells);
-  // JK02_24S uses offsets based at 0; JK02_32S adds 16 bytes to the register map.
   const o=cells.length>=32?32:0;
   const total=u32le(b,118+o);
   const current=i32le(b,126+o);
@@ -34,11 +33,11 @@ function u32le(b,i){return (b[i]>>>0)|((b[i+1]>>>0)<<8)|((b[i+2]>>>0)<<16)|((b[i
 function i32le(b,i){const v=u32le(b,i);return v>2147483647?v-4294967296:v}
 function i16le(b,i){const v=u16(b,i);return v>32767?v-65536:v}`;
 
-const re=/function parse55\\(b\\)\\{[\\s\\S]*?\\nfunction parse57/;
+const re=/function parse55\(b\)\{[\s\S]*?\nfunction parse57/;
 if(!re.test(s))throw new Error('Could not locate parse55 block');
-s=s.replace(re,replacement+'\\nfunction parse57');
+s=s.replace(re,replacement+'\nfunction parse57');
 
-const reJk=/function jkData\\(data\\)\\{[\\s\\S]*?\\nasync function connectBmsDevice/;
+const reJk=/function jkData\(data\)\{[\s\S]*?\nasync function connectBmsDevice/;
 const jkReplacement=`function jkData(data){
   jb=add(jb,Uint8Array.from(data));
   while(jb.length>=4){
@@ -61,7 +60,7 @@ const jkReplacement=`function jkData(data){
   }
 }`;
 if(!reJk.test(s))throw new Error('Could not locate jkData block');
-s=s.replace(reJk,jkReplacement+'\\nasync function connectBmsDevice');
+s=s.replace(reJk,jkReplacement+'\nasync function connectBmsDevice');
 
 fs.writeFileSync(file,s);
 console.log('JK BMS 55AA runtime parser fixed with protocol-correct offsets.');
