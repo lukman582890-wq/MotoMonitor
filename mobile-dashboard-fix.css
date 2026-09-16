@@ -1,0 +1,10 @@
+/* Mobile dashboard compactness fix */
+@media (max-width:650px){
+  .soc{font-size:38px;line-height:.88}
+  .battery-icon{width:78px;height:27px;margin:6px auto 6px}
+  .battery-icon:after{top:7px;height:10px}
+  .bar{height:6px;margin:7px 0}
+  .telemetry h3{margin-bottom:6px}
+  .data{padding:8px}
+  .data b{font-size:12px;margin-top:4px}
+}
