@@ -10,8 +10,7 @@
   const speedControl = document.getElementById('speedControl');
   const modeControl = document.getElementById('modeControl');
   const modeText = document.getElementById('modeText');
-  const gearTexts = document.querySelectorAll('.mini-grid .mini:nth-child(3) b, .gear strong');
-  const gearLabels = document.querySelectorAll('.gear small');
+  const gearTexts = document.querySelectorAll('.gear strong');
 
   if (!speedControl || !modeControl || !modeText) return;
 
@@ -22,16 +21,8 @@
     const mode = modes[index];
     modeText.textContent = mode.name;
 
-    gearTexts.forEach((el) => {
-      if (el.classList.contains('gear')) return;
-      if (el.closest('.gear')) {
-        el.textContent = mode.gear;
-      } else {
-        el.textContent = `${mode.gear} · ${mode.gearLabel}`;
-      }
-    });
-
-    document.querySelectorAll('.gear strong').forEach((el) => { el.textContent = mode.gear; });
+    // Only the actual Gear display is updated. The mini telemetry card is now SOC.
+    gearTexts.forEach((el) => { el.textContent = mode.gear; });
     document.querySelectorAll('.gear small').forEach((el) => { el.textContent = mode.gearLabel; });
     document.body.dataset.ridingMode = mode.name;
     document.body.dataset.gear = mode.gear;
@@ -49,7 +40,6 @@
     setMode(index + 1);
   });
 
-  // Arrow controls remain individually usable.
   document.getElementById('modePrev')?.addEventListener('click', (event) => {
     event.stopPropagation();
     setMode(index - 1);
