@@ -23,15 +23,22 @@ jobs:
           cp dashboard-preview.html site/index.html
           cp mode-controller.js site/mode-controller.js
           cp dashboard-layout-v2.js site/dashboard-layout-v2.js
+          cp navigation-controller.js site/navigation-controller.js
           cp mobile-dashboard-fix.css site/mobile-dashboard-fix.css
+          cp navigation.css site/navigation.css
           python - <<'PY'
           from pathlib import Path
           p = Path('site/index.html')
           html = p.read_text(encoding='utf-8')
           mode = '<script src="./mode-controller.js" defer></script>'
           layout = '<script src="./dashboard-layout-v2.js" defer></script>'
+          nav = '<script src="./navigation-controller.js" defer></script>'
           css = '<link rel="stylesheet" href="./mobile-dashboard-fix.css">'
-          for needle, insert in [(mode, mode), (layout, layout), (css, css)]:
+          nav_css = '<link rel="stylesheet" href="./navigation.css">'
+          for needle, insert in [(mode, mode), (layout, layout), (nav, nav)]:
+              if needle not in html:
+                  html = html.replace('</head>', f'{insert}\n</head>')
+          for needle, insert in [(css, css), (nav_css, nav_css)]:
               if needle not in html:
                   html = html.replace('</head>', f'{insert}\n</head>')
           p.write_text(html, encoding='utf-8')
