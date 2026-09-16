@@ -25,6 +25,7 @@ jobs:
           cp dashboard-layout-v2.js site/dashboard-layout-v2.js
           cp navigation-controller.js site/navigation-controller.js
           cp navigation-v2.js site/navigation-v2.js
+          cp map-click-hotfix.js site/map-click-hotfix.js
           cp mobile-dashboard-fix.css site/mobile-dashboard-fix.css
           cp navigation.css site/navigation.css
           cp navigation-v2.css site/navigation-v2.css
@@ -36,12 +37,13 @@ jobs:
           layout = '<script src="./dashboard-layout-v2.js" defer></script>'
           nav_old = '<script src="./navigation-controller.js" defer></script>'
           nav = '<script src="./navigation-v2.js" defer></script>'
+          hotfix = '<script src="./map-click-hotfix.js" defer></script>'
           css = '<link rel="stylesheet" href="./mobile-dashboard-fix.css">'
           nav_old_css = '<link rel="stylesheet" href="./navigation.css">'
           nav_css = '<link rel="stylesheet" href="./navigation-v2.css">'
           html = html.replace(nav_old, '')
           html = html.replace(nav_old_css, '')
-          for needle, insert in [(mode, mode), (layout, layout), (nav, nav)]:
+          for needle, insert in [(mode, mode), (layout, layout), (nav, nav), (hotfix, hotfix)]:
               if needle not in html:
                   html = html.replace('</head>', f'{insert}\n</head>')
           for needle, insert in [(css, css), (nav_css, nav_css)]:
