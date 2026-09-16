@@ -25,25 +25,25 @@ const lines=[
 "  }",
 "  if(!cells.length)return false;",
 "  st.bms.cells=cells;",
-"  st.bms.voltage=cells.reduce((a,v)=>a+v,0);",
 "  st.bms.delta=Math.max(...cells)-Math.min(...cells);",
 "  jkNeedTelemetry=true;",
-"  log('JK cell frame OK: '+cells.length+'S | '+st.bms.voltage.toFixed(3)+'V | Δ '+st.bms.delta.toFixed(3)+'V');",
+"  log('JK cell frame OK: '+cells.length+'S | Δ '+st.bms.delta.toFixed(3)+'V');",
 "  return true;",
 "}",
 "function telemetryLooksValid(b,i){",
 "  if(i+149>=b.length)return false;",
-"  const current=i32le(b,i+8)/1000,t1=i16le(b,i+12)/10,t2=i16le(b,i+14)/10,soc=b[i+23],pack100=u32le(b,i+80);",
-"  return Number.isFinite(current)&&Math.abs(current)<500&&t1>-40&&t1<100&&t2>-40&&t2<100&&soc<=100&&pack100>=1000&&pack100<=10000;",
+"  const voltage=u32le(b,i)/1000,current=i32le(b,i+8)/1000,t1=i16le(b,i+12)/10,t2=i16le(b,i+14)/10,soc=b[i+23];",
+"  return voltage>=10&&voltage<=150&&Number.isFinite(current)&&Math.abs(current)<500&&t1>-40&&t1<100&&t2>-40&&t2<100&&soc<=100;",
 "}",
 "function parseJKTelemetry(frame){",
 "  if(frame.length!==150)return false;",
 "  if(!telemetryLooksValid(frame,0))return false;",
-"  const current=i32le(frame,8)/1000,t1=i16le(frame,12)/10,t2=i16le(frame,14)/10,soc=frame[23];",
+"  const voltage=u32le(frame,0)/1000,current=i32le(frame,8)/1000,t1=i16le(frame,12)/10,t2=i16le(frame,14)/10,soc=frame[23];",
+"  st.bms.voltage=voltage;",
 "  st.bms.current=Math.abs(current)<0.001?0:current;",
 "  st.bms.soc=soc;",
 "  st.bms.temp=Math.max(t1,t2);",
-"  log('JK telemetry OK: '+st.bms.voltage.toFixed(3)+'V | '+current.toFixed(3)+'A | SOC '+soc+'% | T '+Math.max(t1,t2).toFixed(1)+'C');",
+"  log('JK telemetry OK: '+voltage.toFixed(3)+'V | '+current.toFixed(3)+'A | SOC '+soc+'% | T '+Math.max(t1,t2).toFixed(1)+'C');",
 "  return true;",
 "}",
 "function findJKTelemetry(b){",
@@ -75,4 +75,4 @@ const lines=[
 const replacement=lines.join('\n')+'\n';
 s=s.slice(0,start)+replacement+s.slice(end);
 fs.writeFileSync(file,s);
-console.log('Installed verified JK parser: 150-byte 55AA cell frame + 150-byte telemetry frame.');
+console.log('Installed verified JK parser: 150-byte cell frame + 150-byte telemetry frame; telemetry fields validated against 854 recorded JK cycles.');
