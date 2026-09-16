@@ -35,6 +35,8 @@ jobs:
         run: npm install
       - name: Patch JK BMS BLE picker
         run: node scripts/patch-bms-picker.mjs
+      - name: Fix JK BMS runtime parser
+        run: node scripts/fix-bms-parser.mjs
       - name: Fix dashboard patch script
         run: node scripts/fix-dashboard-script.mjs
       - name: Patch dashboard UI
