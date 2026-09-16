@@ -32,12 +32,12 @@ const lines=[
 "  return true;",
 "}",
 "function telemetryLooksValid(b,i){",
-"  if(i+153>=b.length)return false;",
+"  if(i+149>=b.length)return false;",
 "  const current=i32le(b,i+8)/1000,t1=i16le(b,i+12)/10,t2=i16le(b,i+14)/10,soc=b[i+23],pack100=u32le(b,i+80);",
 "  return Number.isFinite(current)&&Math.abs(current)<500&&t1>-40&&t1<100&&t2>-40&&t2<100&&soc<=100&&pack100>=1000&&pack100<=10000;",
 "}",
 "function parseJKTelemetry(frame){",
-"  if(frame.length!==154)return false;",
+"  if(frame.length!==150)return false;",
 "  if(!telemetryLooksValid(frame,0))return false;",
 "  const current=i32le(frame,8)/1000,t1=i16le(frame,12)/10,t2=i16le(frame,14)/10,soc=frame[23];",
 "  st.bms.current=Math.abs(current)<0.001?0:current;",
@@ -47,7 +47,7 @@ const lines=[
 "  return true;",
 "}",
 "function findJKTelemetry(b){",
-"  for(let i=0;i+154<=b.length;i++){if(telemetryLooksValid(b,i))return i}",
+"  for(let i=0;i+150<=b.length;i++){if(telemetryLooksValid(b,i))return i}",
 "  return -1;",
 "}",
 "function parse4E57(frame){",
@@ -58,9 +58,9 @@ const lines=[
 "  jb=add(jb,Uint8Array.from(data));",
 "  while(jb.length>=4){",
 "    if(jkNeedTelemetry){",
-"      if(jb.length<154)return;",
+"      if(jb.length<150)return;",
 "      const ti=findJKTelemetry(jb);",
-"      if(ti>=0){if(ti>0)jb=jb.slice(ti);const tele=jb.slice(0,154);jb=jb.slice(154);jkNeedTelemetry=false;parseJKTelemetry(tele);render();continue}",
+"      if(ti>=0){if(ti>0)jb=jb.slice(ti);const tele=jb.slice(0,150);jb=jb.slice(150);jkNeedTelemetry=false;parseJKTelemetry(tele);render();continue}",
 "      if(jb.length>160){jb=jb.slice(1);continue}return",
 "    }",
 "    let start=-1;",
@@ -75,4 +75,4 @@ const lines=[
 const replacement=lines.join('\n')+'\n';
 s=s.slice(0,start)+replacement+s.slice(end);
 fs.writeFileSync(file,s);
-console.log('Installed verified JK parser: 150-byte 55AA cell frame + 154-byte telemetry frame.');
+console.log('Installed verified JK parser: 150-byte 55AA cell frame + 150-byte telemetry frame.');
