@@ -2,10 +2,13 @@
   "name": "MotoMonitor",
   "short_name": "MotoMonitor",
   "description": "Motorcycle BMS and VOTOL monitor",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#05090f",
   "theme_color": "#05090f",
-  "icons": []
+  "icons": [
+    {"src":"./icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
 }
