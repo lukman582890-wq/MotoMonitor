@@ -22,21 +22,16 @@ jobs:
           mkdir -p site
           cp dashboard-preview.html site/index.html
           cp mode-controller.js site/mode-controller.js
+          cp dashboard-layout-v2.js site/dashboard-layout-v2.js
           cp mobile-dashboard-fix.css site/mobile-dashboard-fix.css
-          cp dashboard-layout-fix.js site/dashboard-layout-fix.js
-          cp dashboard-layout-fix.css site/dashboard-layout-fix.css
           python - <<'PY'
           from pathlib import Path
           p = Path('site/index.html')
           html = p.read_text(encoding='utf-8')
-          tag = '<script src="./mode-controller.js" defer></script>'
-          layout_js = '<script src="./dashboard-layout-fix.js" defer></script>'
+          mode = '<script src="./mode-controller.js" defer></script>'
+          layout = '<script src="./dashboard-layout-v2.js" defer></script>'
           css = '<link rel="stylesheet" href="./mobile-dashboard-fix.css">'
-          layout_css = '<link rel="stylesheet" href="./dashboard-layout-fix.css">'
-          for needle, insert in [(tag, tag), (layout_js, layout_js)]:
-              if needle not in html:
-                  html = html.replace('</head>', f'{insert}\n</head>')
-          for needle, insert in [(css, css), (layout_css, layout_css)]:
+          for needle, insert in [(mode, mode), (layout, layout), (css, css)]:
               if needle not in html:
                   html = html.replace('</head>', f'{insert}\n</head>')
           p.write_text(html, encoding='utf-8')
