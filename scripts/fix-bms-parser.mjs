@@ -54,10 +54,10 @@ const lines=[
 "    if(type===1){jkPendingTelemetry=true;log('JK realtime frame part 1 received');return true}",
 "    if(type===2)return parseJKCells(frame);",
 "    if(type===3)return parseJKInfo(frame);",
-"    return false;
-  }",
+"    return false;",
+"  }",
 "  if(jkPendingTelemetry&&telemetryLooksValid(frame)){jkPendingTelemetry=false;return parseJKTelemetry(frame)}",
-"  if(telemetryLooksValid(frame)){return parseJKTelemetry(frame)}",
+"  if(telemetryLooksValid(frame))return parseJKTelemetry(frame);",
 "  return false;",
 "}",
 "function jkData(data){",
