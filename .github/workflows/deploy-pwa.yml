@@ -21,6 +21,16 @@ jobs:
           rm -rf site
           mkdir -p site
           cp dashboard-preview.html site/index.html
+          cp mode-controller.js site/mode-controller.js
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('site/index.html')
+          html = p.read_text(encoding='utf-8')
+          tag = '<script src="./mode-controller.js" defer></script>'
+          if tag not in html:
+              html = html.replace('</head>', f'{tag}\n</head>')
+          p.write_text(html, encoding='utf-8')
+          PY
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
