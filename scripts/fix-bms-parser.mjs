@@ -3,129 +3,149 @@ import fs from 'node:fs';
 const file='src/main.js';
 let s=fs.readFileSync(file,'utf8');
 
-const replacement=`let jkCellCount=0;
-let jkNominalCapacity=0;
-function parse55AA(e){
-  const type=e[4];
-  const u16le=i=>e[i+1]<<8|e[i];
-  if(type===2){
-    const count=Number.isInteger(jkCellCount)&&jkCellCount>0&&jkCellCount<=32?jkCellCount:32;
-    const cells=[];
-    for(let n=0;n<count;n++){
-      const i=6+2*n;
-      if(i+1>=e.length)break;
-      const v=u16le(i)/1000;
-      if(v>1&&v<5)cells.push(v);
-    }
-    if(!cells.length)return;
-    const cellSum=Math.round(cells.reduce((a,v)=>a+v,0)*1000);
-    let pos=-1;
-    for(let i=40;i<e.length-40;i++){
-      const v=(e[i+3]<<24|e[i+2]<<16|e[i+1]<<8|e[i])>>>0;
-      if(Math.abs(v-cellSum)<100){pos=i;break}
-    }
-    if(pos<0)return;
-    const voltage=(e[pos+3]<<24|e[pos+2]<<16|e[pos+1]<<8|e[pos])/1000;
-    let currentRaw=(e[pos+11]<<24|e[pos+10]<<16|e[pos+9]<<8|e[pos+8])>>>0;
-    if(currentRaw>2147483647)currentRaw-=4294967296;
-    let current=currentRaw/1000;
-    if(Math.abs(current)<0.05)current=0;
-    const soc=e[pos+23];
-    const tempAraw=(e[pos+13]<<8|e[pos+12]);
-    const tempBraw=(e[pos+15]<<8|e[pos+14]);
-    const tempA=0.1*(tempAraw>32767?tempAraw-65536:tempAraw);
-    const tempB=0.1*(tempBraw>32767?tempBraw-65536:tempBraw);
-    const tempMosRaw=(e[pos+21]<<8|e[pos+20]);
-    const tempMos=0.001*(tempMosRaw>32767?tempMosRaw-65536:tempMosRaw);
-    const capAt43=pos+43<e.length?((e[pos+43]<<24|e[pos+42]<<16|e[pos+41]<<8|e[pos+40])>>>0)/1000:0;
-    const capAt31=((e[pos+31]<<24|e[pos+30]<<16|e[pos+29]<<8|e[pos+28])>>>0)/1000;
-    const capacity=capAt43>5&&capAt43<500?capAt43:(jkNominalCapacity||capAt31);
-    const remainCap=soc*capacity/100;
-    const cycles=(e[pos+35]<<24|e[pos+34]<<16|e[pos+33]<<8|e[pos+32])>>>0;
-    const cycleCap=((e[pos+39]<<24|e[pos+38]<<16|e[pos+37]<<8|e[pos+36])>>>0)/1000;
-    const runtime=pos+47<e.length?((e[pos+47]<<24|e[pos+46]<<16|e[pos+45]<<8|e[pos+44])>>>0):null;
-    let tempMos2=0;
-    if(pos===118){const v=e[135]<<8|e[134];tempMos2=.1*(v>32767?v-65536:v)}
-    else if(pos===150){const v=e[145]<<8|e[144];tempMos2=.1*(v>32767?v-65536:v)}
-    else{const q=pos>=150?pos-6:pos+16;if(q>=0&&q+1<e.length){const v=e[q+1]<<8|e[q];tempMos2=.1*(v>32767?v-65536:v)}}
-    const tempMosFinal=tempMos2;
-    const delta=Math.max(...cells)-Math.min(...cells);
-    if(voltage>10&&voltage<150&&Math.abs(current)<500&&soc<=100){
-      st.bms.cells=cells;
-      st.bms.voltage=voltage;
-      st.bms.current=current;
-      st.bms.soc=soc;
-      st.bms.temp=Math.max(tempA,tempB);
-      st.bms.delta=delta;
-    }
-  }else if(type===1){
-    const count=e[114];
-    if(count>0&&count<=32)jkCellCount=count;
-    if(e.length>133){
-      const cap=(u16le(130)|e[132]<<16|e[133]<<24)>>>0;
-      const nominal=cap/1000;
-      if(nominal>5&&nominal<1000)jkNominalCapacity=nominal;
+const marker='let jb=new Uint8Array(0);';
+const start=s.indexOf(marker);
+if(start<0) throw new Error('JK parser start marker not found');
+const end=s.indexOf('async function connectBmsDevice',start);
+if(end<0) throw new Error('connectBmsDevice marker not found after JK parser');
+
+const replacement=`let jb=new Uint8Array(0);
+function add(a,b){const x=new Uint8Array(a.length+b.length);x.set(a);x.set(b,a.length);return x}
+const u16le=(b,i)=>(b[i]|(b[i+1]<<8))>>>0;
+const u32le=(b,i)=>(b[i]|(b[i+1]<<8)|(b[i+2]<<16)|(b[i+3]<<24))>>>0;
+const i32le=(b,i)=>{const v=u32le(b,i);return v>0x7fffffff?v-0x100000000:v};
+const i16le=(b,i)=>{const v=u16le(b,i);return v>0x7fff?v-0x10000:v};
+
+function jkChecksumOk(frame){
+  if(frame.length!==300)return false;
+  let sum=0;
+  for(let i=0;i<299;i++)sum=(sum+frame[i])&255;
+  return sum===frame[299];
+}
+
+function findTelemetryOffset(e,cells){
+  const target=Math.round(cells.reduce((a,v)=>a+v,0)*1000);
+  const candidates=[];
+  for(let i=70;i<=210;i++){
+    if(i+27>=e.length)break;
+    if(u32le(e,i)!==target)continue;
+    const voltage=u32le(e,i)/1000;
+    const current=i32le(e,i+8)/1000;
+    const t1=i16le(e,i+12)/10;
+    const t2=i16le(e,i+14)/10;
+    const soc=e[i+23];
+    if(voltage>=10&&voltage<=150&&Math.abs(current)<=500&&t1>-50&&t1<120&&t2>-50&&t2<120&&soc<=100){
+      candidates.push({i,voltage,current,t1,t2,soc});
     }
   }
+  if(!candidates.length)return null;
+  candidates.sort((a,b)=>Math.abs(a.i-148)-Math.abs(b.i-148));
+  return candidates[0];
 }
+
+function parse55AA(e){
+  if(e.length!==300||e[0]!==0x55||e[1]!==0xAA||e[2]!==0xEB||e[3]!==0x90)return false;
+  if(!jkChecksumOk(e))return false;
+  const type=e[4];
+  if(type===3){
+    const vendor=Array.from(e.slice(6,22)).filter(x=>x>=32&&x<127).map(x=>String.fromCharCode(x)).join('').replace(/\\0/g,'').trim();
+    if(vendor)log(\`JK BMS info: \${vendor}\`);
+    return true;
+  }
+  if(type===1){
+    const possible=[];
+    for(let i=6;i<=120;i++){
+      const v=e[i];
+      if(v>=8&&v<=32)possible.push(v);
+    }
+    if(possible.length){
+      const c=possible[0];
+      if(c>=8&&c<=32)window.__jkCellCount=c;
+    }
+    return true;
+  }
+  if(type!==2)return true;
+
+  const cells=[];
+  for(let i=0;i<32&&6+2*i+1<e.length;i++){
+    const v=u16le(e,6+2*i)/1000;
+    if(v>=1.5&&v<=5.0)cells.push(v);
+    else if(cells.length>0)break;
+  }
+  if(!cells.length)return false;
+
+  const tele=findTelemetryOffset(e,cells);
+  if(!tele)return false;
+
+  const delta=Math.max(...cells)-Math.min(...cells);
+  st.bms.cells=cells;
+  st.bms.voltage=tele.voltage;
+  st.bms.current=Math.abs(tele.current)<0.02?0:tele.current;
+  st.bms.soc=tele.soc;
+  st.bms.temp=Math.max(tele.t1,tele.t2);
+  st.bms.delta=delta;
+  log(\`JK OK: \${cells.length}S | \${tele.voltage.toFixed(3)}V | \${tele.current.toFixed(3)}A | SOC \${tele.soc}% | T \${Math.max(tele.t1,tele.t2).toFixed(1)}C | tele@\${tele.i}\`);
+  return true;
+}
+
 function parse4E57(e){
-  const t=e.slice(10,e.length-4);let p=0;
-  const out={soc:null,voltage:0,current:0,maxCellTemp:0,cells:[]};
-  for(;p<t.length;){
-    const tag=t[p++];
-    if(tag===121){const len=t[p++];for(let i=0;i<len/2&&p+1<t.length;i++,p+=2){const v=(t[p+1]<<8|t[p])/1000;if(v>1&&v<5)out.cells.push(v)}}
-    else if(tag===131){out.voltage=(t[p]<<24|t[p+1]<<16|t[p+2]<<8|t[p+3])/1000;p+=4}
-    else if(tag===132){let v=t[p]<<24|t[p+1]<<16|t[p+2]<<8|t[p+3];if(v>2147483647)v-=4294967296;out.current=v/1000;p+=4}
-    else if(tag===133){out.soc=t[p++]}
-    else if(tag===170){p+=4}
-    else if(tag>=128&&tag<=130){let v=t[p]<<8|t[p+1];if(v>32767)v-=65536;out.maxCellTemp=Math.max(out.maxCellTemp||-100,v/10);p+=2}
+  if(e.length<20||e[0]!==0x4E||e[1]!==0x57)return false;
+  let p=10,end=e.length-4;
+  const cells=[];let voltage=null,current=null,soc=null,temp=null;
+  while(p<end){
+    const tag=e[p++];
+    if(tag===121){const len=e[p++];for(let i=0;i<len/2&&p+1<end;i++,p+=2){const v=u16le(e,p)/1000;if(v>1&&v<5)cells.push(v)}}
+    else if(tag===131&&p+3<end){voltage=((e[p]<<24)|(e[p+1]<<16)|(e[p+2]<<8)|e[p+3])/1000;p+=4}
+    else if(tag===132&&p+3<end){let v=(e[p]<<24)|(e[p+1]<<16)|(e[p+2]<<8)|e[p+3];if(v>2147483647)v-=4294967296;current=v/1000;p+=4}
+    else if(tag===133&&p<end){soc=e[p++]}
+    else if(tag>=128&&tag<=130&&p+1<end){const v=i16le(e,p)/10;temp=Math.max(temp??-100,v);p+=2}
     else if([134,138,139,140,142].includes(tag))p++;
     else if(tag===135)p+=2;
-    else if(tag===137)p+=4;
+    else if(tag===137||tag===170)p+=4;
     else if([144,145,146,147,148,149,150].includes(tag))p+=2;
     else break;
   }
-  if(out.cells.length){st.bms.cells=out.cells;st.bms.delta=Math.max(...out.cells)-Math.min(...out.cells)}
-  if(out.voltage>10&&out.voltage<150)st.bms.voltage=out.voltage;
-  if(Math.abs(out.current)<500)st.bms.current=Math.abs(out.current)<.05?0:out.current;
-  if(out.soc!=null&&out.soc<=100)st.bms.soc=out.soc;
-  if(out.maxCellTemp>-100&&out.maxCellTemp<100)st.bms.temp=out.maxCellTemp;
+  if(cells.length) {st.bms.cells=cells;st.bms.delta=Math.max(...cells)-Math.min(...cells)}
+  if(Number.isFinite(voltage)&&voltage>10&&voltage<150)st.bms.voltage=voltage;
+  if(Number.isFinite(current)&&Math.abs(current)<500)st.bms.current=Math.abs(current)<.02?0:current;
+  if(Number.isFinite(soc)&&soc<=100)st.bms.soc=soc;
+  if(Number.isFinite(temp)&&temp>-50&&temp<120)st.bms.temp=temp;
+  return true;
 }
-function is55ChecksumValid(len){if(len<20||len>jb.length)return false;let sum=0;for(let i=0;i<len-1;i++)sum=sum+jb[i]&255;return sum===jb[len-1]}
-function find55LengthByChecksum(){for(let len=260;len<=350&&len<=jb.length;len++)if(is55ChecksumValid(len))return len;return -1}
-function find55LengthByNextHeader(){for(let i=20;i+1<jb.length;i++)if(jb[i]===85&&jb[i+1]===170&&is55ChecksumValid(i))return i;return -1}
+
 function jkData(data){
   jb=add(jb,Uint8Array.from(data));
-  while(jb.length>=20){
-    let start=-1,kind='';
-    for(let i=0;i<jb.length-1;i++){if(jb[i]===78&&jb[i+1]===87){start=i;kind='4E57';break}if(jb[i]===85&&jb[i+1]===170){start=i;kind='55AA';break}}
-    if(start<0){if(jb.length>1000)jb=jb.slice(-10);return}
-    if(start)jb=jb.slice(start);
-    if(kind==='4E57'){
-      if(jb.length<4)return;
-      const len=jb[2]<<8|jb[3];
-      if(len<20||len>2048){jb=jb.slice(2);continue}
-      if(jb.length<len)return;
-      const frame=jb.slice(0,len);jb=jb.slice(len);
-      let sum=0;for(let i=0;i<len-4;i++)sum=sum+frame[i]&4294967295;
-      const expected=(frame[len-4]<<24|frame[len-3]<<16|frame[len-2]<<8|frame[len-1])>>>0;
-      if(sum===expected)parse4E57(frame);
-    }else{
-      let len=find55LengthByChecksum();
-      if(len<0)len=find55LengthByNextHeader();
-      if(len<0){if(jb.length>500)jb=jb.slice(1);return}
-      const frame=jb.slice(0,len);jb=jb.slice(len);parse55AA(frame);
+  while(jb.length>=4){
+    let start=-1;
+    for(let i=0;i<jb.length-3;i++){
+      if(jb[i]===0x55&&jb[i+1]===0xAA&&jb[i+2]===0xEB&&jb[i+3]===0x90){start=i;break}
+      if(jb[i]===0x4E&&jb[i+1]===0x57){start=i;break}
     }
+    if(start<0){jb=jb.slice(-3);return}
+    if(start>0)jb=jb.slice(start);
+
+    if(jb[0]===0x55){
+      if(jb.length<300)return;
+      const frame=jb.slice(0,300);
+      if(!jkChecksumOk(frame)){log('JK: invalid 300-byte checksum, resync');jb=jb.slice(1);continue}
+      jb=jb.slice(300);
+      parse55AA(frame);
+      render();
+      continue;
+    }
+
+    if(jb.length<4)return;
+    const len=(jb[2]<<8)|jb[3];
+    if(len<20||len>2048){jb=jb.slice(2);continue}
+    if(jb.length<len)return;
+    const frame=jb.slice(0,len);jb=jb.slice(len);
+    parse4E57(frame);
     render();
   }
-}`;
+}
+`;
 
-const re=/function parse55\(b\)\{[\s\S]*?\nfunction parse57/;
-if(re.test(s))s=s.replace(re,replacement+'\n');
-else if(!s.includes('function parse55AA(e)'))throw new Error('Could not locate JK parser block');
-
-const reJk=/function jkData\(data\)\{[\s\S]*?\nasync function connectBmsDevice/;
-if(reJk.test(s))s=s.replace(reJk,'async function connectBmsDevice');
-
+s=s.slice(0,start)+replacement+s.slice(end);
 fs.writeFileSync(file,s);
-console.log('Applied exact proven JK 55AA telemetry decoder.');
+console.log('Installed JK 55AA parser: exact 300-byte frames, checksum validation, dynamic telemetry offset, 20S support.');
+`;
