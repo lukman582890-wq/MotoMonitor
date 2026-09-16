@@ -11,6 +11,7 @@
     const tempPanel = panels[1];
     if (!battery) return;
 
+    const miniGrid = dashboard.querySelector('.mini-grid');
     const miniCards = dashboard.querySelectorAll('.mini-grid .mini');
     const miniSoc = miniCards[2]?.querySelector('b');
     const soc = document.getElementById('soc');
@@ -23,6 +24,15 @@
         miniSoc.id = 'mini-soc-v2';
         miniSoc.textContent = soc?.textContent || '78%';
       }
+    }
+
+    // Add the charge 0-100% estimate directly beside the SOC card.
+    if (miniGrid && !miniGrid.querySelector('#charge-estimate-v2')) {
+      const charge = document.createElement('div');
+      charge.className = 'mini charge-estimate';
+      charge.id = 'charge-estimate-v2';
+      charge.innerHTML = '<span>Estimasi Charge 0-100%</span><b>--</b>';
+      miniGrid.appendChild(charge);
     }
 
     // Remove the large SOC presentation from the Battery/BMS panel.
@@ -54,15 +64,23 @@
       if (label.textContent.trim().toUpperCase() === 'BMS') label.textContent = 'BMS TEMP';
     });
 
-    // Compact 3-column grid on phones, 2-column grid elsewhere.
+    // Compact grid: four telemetry cards on phones, two columns on larger screens.
     let style = document.getElementById('dashboard-layout-v2-style');
     if (!style) {
       style = document.createElement('style');
       style.id = 'dashboard-layout-v2-style';
       style.textContent = `
+        #dashboard .mini-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+        #dashboard .mini-grid .mini{min-width:0}
+        #dashboard .charge-estimate span{white-space:nowrap;letter-spacing:.1em}
         #dashboard .telemetry .data-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
         #dashboard .telemetry .data{min-width:0}
         @media(max-width:650px){
+          #dashboard .mini-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+          #dashboard .mini-grid .mini{padding:8px 5px}
+          #dashboard .mini-grid .mini span{font-size:5.5px;letter-spacing:.08em}
+          #dashboard .mini-grid .mini b{font-size:11px}
+          #dashboard .charge-estimate b{font-size:10px}
           #dashboard .telemetry .data-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
           #dashboard .telemetry .data{padding:8px 6px;min-height:48px}
           #dashboard .telemetry .data b{font-size:12px}
