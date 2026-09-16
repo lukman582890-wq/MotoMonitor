@@ -21,12 +21,12 @@
     const tempPanel = document.querySelectorAll('#dashboard .telemetry')[1];
     if (!grid) return;
 
-    // The large SOC number, battery icon and bar are intentionally removed.
-    battery.querySelector('.soc')?.remove();
+    // Hide the large SOC display but keep #soc in the DOM as the live data source.
+    const socDisplay = battery.querySelector('.soc');
+    if (socDisplay) socDisplay.style.display = 'none';
     battery.querySelector('.battery-icon')?.remove();
     battery.querySelector('.bar')?.remove();
 
-    // Rename the section because SOC is now displayed in the mini telemetry row.
     const heading = battery.querySelector('h3');
     if (heading) heading.textContent = 'BATTERY / BMS';
 
@@ -34,7 +34,7 @@
     const currentLabel = grid.querySelector('.data:nth-child(2) .label');
     if (currentLabel) currentLabel.textContent = 'BMS Current';
 
-    // Move all four temperature/cell cards into this same box.
+    // Move Controller, Motor, BMS and Cells into the same Battery/BMS box.
     if (tempPanel) {
       const tempGrid = tempPanel.querySelector('.data-grid');
       if (tempGrid) {
@@ -43,13 +43,12 @@
       tempPanel.remove();
     }
 
-    // Keep BMS temperature clearly labeled.
     const bmsCard = [...grid.querySelectorAll('.data')].find((card) => {
       return card.querySelector('.label')?.textContent.trim().toUpperCase() === 'BMS';
     });
     if (bmsCard) bmsCard.querySelector('.label').textContent = 'BMS TEMP';
 
-    // Keep the compact SOC card synchronized if another script updates #soc.
+    // Keep the compact SOC card synchronized with the hidden live SOC source.
     const soc = document.getElementById('soc');
     const miniSoc = document.getElementById('mini-soc');
     if (soc && miniSoc) {
