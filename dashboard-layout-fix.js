@@ -1,36 +1,61 @@
-/* Dashboard layout: replace Gear mini-card with SOC and combine BMS temperature with battery telemetry. */
+/* Dashboard layout: replace Gear mini-card with SOC and combine all battery telemetry in one box. */
 (function () {
   function applyLayout() {
     const miniCards = document.querySelectorAll('.mini-grid .mini');
     const battery = document.querySelector('#dashboard .telemetry');
     if (!miniCards.length || !battery) return;
 
-    // The third mini card is no longer Gear; it becomes a compact SOC readout.
+    // Third mini card becomes the compact SOC readout.
     const mini = miniCards[2];
     if (mini) {
       const label = mini.querySelector('span');
       const value = mini.querySelector('b');
       if (label) label.textContent = 'SOC';
-      if (value) value.textContent = (document.getElementById('soc')?.textContent || '78%');
+      if (value) {
+        value.id = 'mini-soc';
+        value.textContent = document.getElementById('soc')?.textContent || '78%';
+      }
     }
 
     const grid = battery.querySelector('.data-grid');
-    if (grid && !grid.querySelector('.bms-temp')) {
-      const temp = document.createElement('div');
-      temp.className = 'data bms-temp';
-      temp.innerHTML = '<span class="label">Temperature BMS</span><b>38 °C</b>';
-      grid.appendChild(temp);
-    }
+    const tempPanel = document.querySelectorAll('#dashboard .telemetry')[1];
+    if (!grid) return;
 
-    // Keep voltage/current together with BMS temperature in the same Battery/SOC box.
-    const currentLabel = grid?.querySelector('.data:nth-child(2) .label');
+    // The large SOC number, battery icon and bar are intentionally removed.
+    battery.querySelector('.soc')?.remove();
+    battery.querySelector('.battery-icon')?.remove();
+    battery.querySelector('.bar')?.remove();
+
+    // Rename the section because SOC is now displayed in the mini telemetry row.
+    const heading = battery.querySelector('h3');
+    if (heading) heading.textContent = 'BATTERY / BMS';
+
+    // Voltage + BMS current remain the first two cards.
+    const currentLabel = grid.querySelector('.data:nth-child(2) .label');
     if (currentLabel) currentLabel.textContent = 'BMS Current';
 
-    // Remove the separate Temperature panel from the dashboard.
-    const panels = document.querySelectorAll('#dashboard .telemetry');
-    panels.forEach((panel, index) => {
-      if (index === 1) panel.style.display = 'none';
+    // Move all four temperature/cell cards into this same box.
+    if (tempPanel) {
+      const tempGrid = tempPanel.querySelector('.data-grid');
+      if (tempGrid) {
+        [...tempGrid.querySelectorAll('.data')].forEach((card) => grid.appendChild(card));
+      }
+      tempPanel.remove();
+    }
+
+    // Keep BMS temperature clearly labeled.
+    const bmsCard = [...grid.querySelectorAll('.data')].find((card) => {
+      return card.querySelector('.label')?.textContent.trim().toUpperCase() === 'BMS';
     });
+    if (bmsCard) bmsCard.querySelector('.label').textContent = 'BMS TEMP';
+
+    // Keep the compact SOC card synchronized if another script updates #soc.
+    const soc = document.getElementById('soc');
+    const miniSoc = document.getElementById('mini-soc');
+    if (soc && miniSoc) {
+      const observer = new MutationObserver(() => { miniSoc.textContent = soc.textContent; });
+      observer.observe(soc, { childList: true, characterData: true, subtree: true });
+    }
   }
 
   if (document.readyState === 'loading') {
