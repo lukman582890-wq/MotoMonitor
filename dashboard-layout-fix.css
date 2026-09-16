@@ -1,8 +1,8 @@
 /* Compact battery telemetry layout */
 .bms-temp{min-width:0}
 @media(max-width:650px){
-  #dashboard .telemetry:first-of-type .data-grid{grid-template-columns:repeat(3,1fr);gap:5px}
-  #dashboard .telemetry:first-of-type .data{padding:8px 6px;min-height:48px}
-  #dashboard .telemetry:first-of-type .data b{font-size:12px}
-  #dashboard .telemetry:first-of-type .label{font-size:6.5px}
+  #dashboard .telemetry .data-grid{grid-template-columns:repeat(3,1fr);gap:5px}
+  #dashboard .telemetry .data{padding:8px 6px;min-height:48px}
+  #dashboard .telemetry .data b{font-size:12px}
+  #dashboard .telemetry .label{font-size:6.5px}
 }
