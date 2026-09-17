@@ -1,85 +1,24 @@
-/* MotoMonitor Navigation V2.2 - direct, capture-phase mobile navigation. */
+/* MotoMonitor Navigation V3 - real Leaflet map. */
 (function(){
-  'use strict';
-
-  function init(){
-    const app=document.querySelector('.app');
-    const nav=document.querySelector('.bottom');
-    const dashboard=document.getElementById('dashboard');
-    if(!app||!nav||!dashboard)return;
-
-    // Remove only maps created by this navigation layer on a re-init.
-    app.querySelectorAll('.nav-screen').forEach(x=>x.remove());
-
-    const map=document.createElement('main');
-    map.className='screen nav-screen';
-    map.id='map-v2';
-    map.innerHTML=`
-      <div class="map-shell">
-        <header class="map-top"><button class="map-menu" type="button" aria-label="Menu">☰</button><b>Map</b><button class="map-settings" type="button" aria-label="Map settings">⚙</button></header>
-        <section class="map-view">
-          <div class="map-water"></div><div class="map-road r1"></div><div class="map-road r2"></div><div class="map-road r3"></div><div class="map-road r4"></div>
-          <div class="map-city">Jakarta</div><div class="map-label ml-tangerang">Tangerang</div><div class="map-label ml-bekasi">Bekasi</div><div class="map-label ml-depok">Depok</div>
-          <div class="map-layer">▱</div><div class="map-layers">≋</div><div class="map-compass">◈</div>
-          <div class="route-glow"></div><div class="route-line"></div><div class="route-dot start"></div><div class="route-dot current"></div>
-        </section>
-        <section class="map-stats-v2"><div><span>KECEPATAN</span><b id="map-speed-v2">65 km/h</b></div><div><span>JARAK</span><b>12.4 km</b></div><div><span>DURASI</span><b>00:18:32</b></div></section>
-        <button class="record-v2" id="record-v2" type="button">⏺ <span>Stop Recording</span></button>
-      </div>`;
-    app.insertBefore(map,nav);
-
-    const mapKey='map';
-    function showDashboard(){
-      dashboard.classList.add('active');
-      map.classList.remove('active');
-      nav.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('active',i===0));
-      history.replaceState(null,'','#dashboard');
-      window.scrollTo(0,0);
-    }
-    function showMap(){
-      dashboard.classList.remove('active');
-      map.classList.add('active');
-      nav.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('active',i===1));
-      history.replaceState(null,'','#map');
-      window.scrollTo(0,0);
-    }
-    function handleNav(event){
-      const button=event.target.closest('.bottom button');
-      if(!button || !nav.contains(button)) return;
-      const buttons=[...nav.querySelectorAll('button')];
-      const index=buttons.indexOf(button);
-      if(index===1){
-        event.preventDefault();
-        event.stopPropagation();
-        if(event.stopImmediatePropagation)event.stopImmediatePropagation();
-        showMap();
-      }else if(index===0){
-        event.preventDefault();
-        event.stopPropagation();
-        if(event.stopImmediatePropagation)event.stopImmediatePropagation();
-        showDashboard();
-      }
-    }
-
-    // Capture pointer/click events so no other navigation handler can swallow mobile taps.
-    nav.addEventListener('pointerup',handleNav,true);
-    nav.addEventListener('touchend',handleNav,true);
-    nav.addEventListener('click',handleNav,true);
-
-    // Also expose a direct API for debugging and other UI layers.
-    window.MotoMonitorShowMap=showMap;
-    window.MotoMonitorShowDashboard=showDashboard;
-
-    map.querySelector('.map-menu').addEventListener('click',showDashboard);
-    map.querySelector('#record-v2').addEventListener('click',()=>{
-      const b=map.querySelector('#record-v2 span');
-      b.textContent=b.textContent.includes('Stop')?'Start Recording':'Stop Recording';
-    });
-
-    const hash=(location.hash||'').slice(1);
-    if(hash===mapKey)showMap();else showDashboard();
-  }
-
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
-  else init();
+'use strict';
+const CSS='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',JS='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+function leaflet(cb){if(window.L)return cb();if(!document.querySelector('#leaflet-js')){let l=document.createElement('link');l.rel='stylesheet';l.href=CSS;document.head.appendChild(l);let s=document.createElement('script');s.id='leaflet-js';s.src=JS;s.onload=cb;s.onerror=()=>console.error('Leaflet failed');document.head.appendChild(s)}else{document.querySelector('#leaflet-js').addEventListener('load',cb,{once:true})}}
+function init(){
+ const app=document.querySelector('.app'),nav=document.querySelector('.bottom'),dash=document.getElementById('dashboard');if(!app||!nav||!dash)return;
+ document.getElementById('map-v2')?.remove();
+ const map=document.createElement('main');map.id='map-v2';map.className='screen nav-screen';
+ map.innerHTML='<div class="map-shell"><header class="map-top"><button id="map-back" type="button">‹</button><div><b>MAP</b><small>LIVE GPS</small></div><button id="map-locate" type="button">⌖</button></header><div class="map-search-row"><input id="map-q" type="search" placeholder="Cari alamat atau tempat"><button id="map-search" type="button">CARI</button></div><button id="map-current" class="map-current-btn" type="button">📍 Gunakan lokasi saya</button><div id="leaflet-map" class="map-view"></div><section class="map-stats-v2"><div><span>KECEPATAN</span><b id="mspeed">0 km/h</b></div><div><span>JARAK</span><b id="mdist">0.00 km</b></div><div><span>GPS</span><b id="mgps">READY</b></div></section><button id="record-map" class="record-v2" type="button">⏺ <span>Start Recording</span></button></div>';
+ app.insertBefore(map,nav);
+ let lm=null,marker=null,circle=null,watch=null,last=null,dist=0;
+ const showDash=()=>{dash.classList.add('active');map.classList.remove('active');nav.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('active',i===0));history.replaceState(null,'','#dashboard')};
+ const showMap=()=>{dash.classList.remove('active');map.classList.add('active');nav.querySelectorAll('button').forEach((b,i)=>b.classList.toggle('active',i===1));history.replaceState(null,'','#map');leaflet(()=>{if(!lm){lm=L.map('leaflet-map',{zoomControl:true}).setView([-6.2,106.82],12);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(lm);lm.on('click',e=>point(e.latlng.lat,e.latlng.lng,'Titik peta'));}setTimeout(()=>lm.invalidateSize(),150)})};
+ function point(lat,lon,label){if(!lm)return;if(marker)marker.remove();marker=L.marker([lat,lon]).addTo(lm).bindPopup(label).openPopup();lm.setView([lat,lon],16)}
+ function gps(){if(!navigator.geolocation){document.getElementById('mgps').textContent='NO GPS';return}leaflet(()=>{showMap();document.getElementById('mgps').textContent='LOCATING…';if(watch!==null)navigator.geolocation.clearWatch(watch);watch=navigator.geolocation.watchPosition(p=>{let{latitude:lat,longitude:lon,speed}=p.coords;if(last){let d=L.latLng(last[0],last[1]).distanceTo([lat,lon]);if(d>2&&d<1000)dist+=d/1000}last=[lat,lon];point(lat,lon,'Lokasi saya');if(!circle)circle=L.circle([lat,lon],{radius:p.coords.accuracy||20,weight:1,fillOpacity:.08}).addTo(lm);else circle.setLatLng([lat,lon]).setRadius(p.coords.accuracy||20);document.getElementById('mspeed').textContent=(speed>=0?Math.round(speed*3.6):0)+' km/h';document.getElementById('mdist').textContent=dist.toFixed(2)+' km';document.getElementById('mgps').textContent='GPS LIVE'},()=>document.getElementById('mgps').textContent='GPS ERROR',{enableHighAccuracy:true,maximumAge:2000,timeout:10000})})}
+ async function search(){let q=document.getElementById('map-q').value.trim();if(!q)return;document.getElementById('mgps').textContent='SEARCH…';try{let r=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=id&q='+encodeURIComponent(q));let a=await r.json();if(!a.length){document.getElementById('mgps').textContent='NOT FOUND';return}point(+a[0].lat,+a[0].lon,a[0].display_name);document.getElementById('map-q').value=a[0].display_name;document.getElementById('mgps').textContent='SELECTED'}catch(e){document.getElementById('mgps').textContent='SEARCH ERROR'}}
+ function navHandler(e){let b=e.target.closest('.bottom button');if(!b)return;let bs=[...nav.querySelectorAll('button')],i=bs.indexOf(b);if(i===1){e.preventDefault();e.stopImmediatePropagation();showMap()}else if(i===0){e.preventDefault();e.stopImmediatePropagation();showDash()}}
+ ['pointerup','touchend','click'].forEach(x=>nav.addEventListener(x,navHandler,true));
+ document.getElementById('map-back').onclick=showDash;document.getElementById('map-locate').onclick=gps;document.getElementById('map-current').onclick=gps;document.getElementById('map-search').onclick=search;document.getElementById('map-q').onkeydown=e=>{if(e.key==='Enter')search()};document.getElementById('record-map').onclick=e=>{let s=e.currentTarget.querySelector('span');s.textContent=s.textContent==='Start Recording'?'Stop Recording':'Start Recording'};
+ window.MotoMonitorShowMap=showMap;window.MotoMonitorShowDashboard=showDash;if(location.hash==='#map')showMap();else showDash();
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
