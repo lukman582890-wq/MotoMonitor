@@ -1,6 +1,19 @@
-/* MotoMonitor Navigation FINAL - single navigation controller. */
+/* MotoMonitor Navigation FINAL - Leaflet map ported from VotolJKUnified. */
 (function(){
   'use strict';
+
+  const LEAFLET_CSS='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+  const LEAFLET_JS='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+
+  function loadLeaflet(done){
+    if(window.L){done();return;}
+    if(!document.querySelector('link[data-leaflet]')){
+      const link=document.createElement('link'); link.rel='stylesheet'; link.href=LEAFLET_CSS; link.dataset.leaflet='1'; document.head.appendChild(link);
+    }
+    const existing=document.querySelector('script[data-leaflet]');
+    if(existing){existing.addEventListener('load',done,{once:true});return;}
+    const script=document.createElement('script'); script.src=LEAFLET_JS; script.async=true; script.dataset.leaflet='1'; script.onload=done; document.head.appendChild(script);
+  }
 
   function boot(){
     const app=document.querySelector('.app');
@@ -8,7 +21,6 @@
     const dashboard=document.getElementById('dashboard');
     if(!app||!oldNav||!dashboard){setTimeout(boot,100);return;}
 
-    // Replace the navigation DOM so listeners from older navigation scripts cannot survive.
     const nav=oldNav.cloneNode(true);
     oldNav.replaceWith(nav);
 
@@ -17,59 +29,132 @@
       map=document.createElement('main');
       map.id='map-final';
       map.className='screen';
-      map.innerHTML=`<div class="map-shell">
-        <header class="map-top"><button class="map-menu" type="button">☰</button><b>Map</b><button type="button">⚙</button></header>
-        <section class="map-view">
-          <div class="map-water"></div><div class="map-road r1"></div><div class="map-road r2"></div><div class="map-road r3"></div><div class="map-road r4"></div>
-          <div class="map-city">Jakarta</div><div class="map-label ml-tangerang">Tangerang</div><div class="map-label ml-bekasi">Bekasi</div><div class="map-label ml-depok">Depok</div>
-          <div class="map-layer">▱</div><div class="map-layers">≋</div><div class="map-compass">◈</div>
-          <div class="route-glow"></div><div class="route-line"></div><div class="route-dot start"></div><div class="route-dot current"></div>
-        </section>
-        <section class="map-stats-v2"><div><span>KECEPATAN</span><b>65 km/h</b></div><div><span>JARAK</span><b>12.4 km</b></div><div><span>DURASI</span><b>00:18:32</b></div></section>
-        <button class="record-v2" id="record-final" type="button">⏺ <span>Stop Recording</span></button>
-      </div>`;
+      map.innerHTML=`
+        <div class="map-shell">
+          <header class="map-top">
+            <button class="map-menu" type="button" aria-label="Dashboard">‹</button>
+            <div><b>MAP</b><small>LIVE GPS</small></div>
+            <button class="map-locate-top" type="button" aria-label="Lokasi saya">⌖</button>
+          </header>
+          <div class="map-search-row">
+            <input id="map-search-final" type="search" placeholder="Cari alamat atau tempat" autocomplete="off">
+            <button id="map-search-btn" type="button">CARI</button>
+          </div>
+          <button class="map-current-btn" id="map-current-final" type="button">📍 Gunakan lokasi saya</button>
+          <section class="map-view" id="leaflet-map-final"></section>
+          <section class="map-stats-v2">
+            <div><span>KECEPATAN</span><b id="map-speed-final">0 km/h</b></div>
+            <div><span>JARAK</span><b id="map-distance-final">0.00 km</b></div>
+            <div><span>STATUS GPS</span><b id="map-gps-final">READY</b></div>
+          </section>
+          <button class="record-v2" id="record-final" type="button">⏺ <span>Start Recording</span></button>
+        </div>`;
       app.insertBefore(map,nav);
     }
 
     const buttons=[...nav.querySelectorAll('button')];
+    let leafletMap=null, marker=null, accuracyCircle=null, watchId=null, lastLocation=null, distanceKm=0;
+
     function dashboardView(e){
       if(e){e.preventDefault();e.stopPropagation();}
-      dashboard.classList.add('active');
-      map.classList.remove('active');
+      dashboard.classList.add('active'); map.classList.remove('active');
       buttons.forEach((b,i)=>b.classList.toggle('active',i===0));
-      history.replaceState(null,'','#dashboard');
-      window.scrollTo(0,0);
+      history.replaceState(null,'','#dashboard'); window.scrollTo(0,0);
     }
+
+    function initMap(){
+      if(leafletMap || !window.L)return;
+      leafletMap=L.map('leaflet-map-final',{zoomControl:true,attributionControl:true}).setView([-6.2,106.82],12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(leafletMap);
+      leafletMap.on('click',function(e){ selectPoint(e.latlng.lat,e.latlng.lng,'Titik peta'); });
+      setTimeout(()=>leafletMap.invalidateSize(),150);
+    }
+
+    function setStatus(text){const el=document.getElementById('map-gps-final');if(el)el.textContent=text;}
+    function setPoint(lat,lon,label,zoom){
+      if(!leafletMap)return;
+      if(marker)marker.remove();
+      marker=L.marker([lat,lon]).addTo(leafletMap).bindPopup(label||'Lokasi dipilih').openPopup();
+      leafletMap.setView([lat,lon],zoom||16);
+    }
+
+    async function reverseGeocode(lat,lon){
+      try{
+        const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=id&lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon);
+        const r=await fetch(url); if(!r.ok)throw new Error('reverse');
+        const data=await r.json();
+        const label=data.display_name||('%.5f, %.5f').replace('%.5f',lat).replace('%.5f',lon);
+        if(marker)marker.bindPopup(label).openPopup();
+      }catch(_){ }
+    }
+
+    function selectPoint(lat,lon,label){
+      setPoint(lat,lon,label,16); setStatus('SELECTED'); reverseGeocode(lat,lon);
+    }
+
+    function startGps(){
+      if(!navigator.geolocation){setStatus('NO GPS');return;}
+      if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+      setStatus('LOCATING…');
+      watchId=navigator.geolocation.watchPosition(function(pos){
+        const lat=pos.coords.latitude, lon=pos.coords.longitude;
+        const speed=Number.isFinite(pos.coords.speed)&&pos.coords.speed>=0?pos.coords.speed*3.6:0;
+        if(lastLocation){const a=L.latLng(lastLocation.lat,lastLocation.lon),b=L.latLng(lat,lon);const d=a.distanceTo(b);if(d>2&&d<1000)distanceKm+=d/1000;}
+        lastLocation={lat,lon};
+        setPoint(lat,lon,'Lokasi saya',16);
+        if(!accuracyCircle)accuracyCircle=L.circle([lat,lon],{radius:pos.coords.accuracy||20,weight:1,fillOpacity:.08}).addTo(leafletMap); else accuracyCircle.setLatLng([lat,lon]).setRadius(pos.coords.accuracy||20);
+        document.getElementById('map-speed-final').textContent=Math.round(speed)+' km/h';
+        document.getElementById('map-distance-final').textContent=distanceKm.toFixed(2)+' km';
+        setStatus('GPS LIVE');
+      },function(){setStatus('GPS ERROR');},{enableHighAccuracy:true,maximumAge:2000,timeout:10000});
+    }
+
+    async function searchPlace(){
+      const q=document.getElementById('map-search-final')?.value.trim(); if(!q)return;
+      const btn=document.getElementById('map-search-btn'); if(btn)btn.disabled=true; setStatus('SEARCH…');
+      try{
+        const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&accept-language=id&q='+encodeURIComponent(q);
+        const r=await fetch(url); if(!r.ok)throw new Error('search'); const places=await r.json();
+        if(!places.length){setStatus('NOT FOUND');return;}
+        const choice=places.length===1?places[0]:await chooseSearchResult(places);
+        if(choice){setPoint(Number(choice.lat),Number(choice.lon),choice.display_name,16);document.getElementById('map-search-final').value=choice.display_name;setStatus('SELECTED');}
+      }catch(_){setStatus('SEARCH ERROR');}
+      finally{if(btn)btn.disabled=false;}
+    }
+
+    function chooseSearchResult(places){
+      return new Promise(resolve=>{
+        const backdrop=document.createElement('div'); backdrop.className='map-results-backdrop';
+        const box=document.createElement('div'); box.className='map-results';
+        box.innerHTML='<b>Pilih lokasi</b>';
+        places.forEach(p=>{const row=document.createElement('button');row.type='button';row.textContent=p.display_name;row.onclick=()=>{backdrop.remove();resolve(p);};box.appendChild(row);});
+        const cancel=document.createElement('button');cancel.type='button';cancel.textContent='BATAL';cancel.className='cancel';cancel.onclick=()=>{backdrop.remove();resolve(null);};box.appendChild(cancel);
+        backdrop.appendChild(box); document.body.appendChild(backdrop);
+      });
+    }
+
     function mapView(e){
       if(e){e.preventDefault();e.stopPropagation();}
-      dashboard.classList.remove('active');
-      map.classList.add('active');
+      dashboard.classList.remove('active'); map.classList.add('active');
       buttons.forEach((b,i)=>b.classList.toggle('active',i===1));
-      history.replaceState(null,'','#map');
-      window.scrollTo(0,0);
+      history.replaceState(null,'','#map'); window.scrollTo(0,0);
+      loadLeaflet(()=>{initMap();setTimeout(()=>leafletMap&&leafletMap.invalidateSize(),100);});
     }
 
     buttons.forEach((button,index)=>{
       const action=index===1?mapView:index===0?dashboardView:null;
-      if(action){
-        button.addEventListener('pointerup',action);
-        button.addEventListener('touchend',action,{passive:false});
-        button.addEventListener('click',action);
-      }
+      if(action){button.addEventListener('pointerup',action);button.addEventListener('touchend',action,{passive:false});button.addEventListener('click',action);}
     });
     map.querySelector('.map-menu').addEventListener('click',dashboardView);
-    map.querySelector('#record-final').addEventListener('click',function(){
-      const s=this.querySelector('span');
-      s.textContent=s.textContent.includes('Stop')?'Start Recording':'Stop Recording';
-    });
+    map.querySelector('.map-locate-top').addEventListener('click',()=>{mapView();setTimeout(startGps,250);});
+    map.querySelector('#map-current-final').addEventListener('click',startGps);
+    map.querySelector('#map-search-btn').addEventListener('click',searchPlace);
+    map.querySelector('#map-search-final').addEventListener('keydown',e=>{if(e.key==='Enter')searchPlace();});
+    map.querySelector('#record-final').addEventListener('click',function(){const s=this.querySelector('span');s.textContent=s.textContent.includes('Start')?'Stop Recording':'Start Recording';});
 
-    window.MotoMonitorShowMap=mapView;
-    window.MotoMonitorShowDashboard=dashboardView;
-
-    if((location.hash||'').slice(1)==='map')mapView();
-    else dashboardView();
+    window.MotoMonitorShowMap=mapView; window.MotoMonitorShowDashboard=dashboardView;
+    if((location.hash||'').slice(1)==='map')mapView();else dashboardView();
   }
 
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});
-  else boot();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
