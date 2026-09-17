@@ -64,9 +64,36 @@
 
     function initMap(){
       if(leafletMap || !window.L)return;
-      leafletMap=L.map('leaflet-map-final',{zoomControl:true,attributionControl:true}).setView([-6.2,106.82],12);
+      const el=document.getElementById('leaflet-map-final');
+      if(!el)return;
+      el.style.pointerEvents='auto';
+      el.style.touchAction='none';
+      leafletMap=L.map(el,{zoomControl:true,attributionControl:true,tap:true,dragging:true,touchZoom:true}).setView([-6.2,106.82],12);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(leafletMap);
-      leafletMap.on('click',function(e){ selectPoint(e.latlng.lat,e.latlng.lng,'Titik peta'); });
+
+      // Native pointer fallback: makes a tap/click select a point even on mobile WebViews.
+      // A small movement is treated as a tap; a drag remains normal Leaflet panning.
+      let down=null;
+      el.addEventListener('pointerdown',function(e){
+        if(e.target.closest('.leaflet-control')){down=null;return;}
+        down={x:e.clientX,y:e.clientY};
+      },{passive:true});
+      el.addEventListener('pointerup',function(e){
+        if(!down || e.target.closest('.leaflet-control')){down=null;return;}
+        const dx=e.clientX-down.x,dy=e.clientY-down.y;
+        down=null;
+        if(Math.hypot(dx,dy)>10)return;
+        const rect=el.getBoundingClientRect();
+        if(!rect.width||!rect.height)return;
+        const point=leafletMap.containerPointToLatLng([e.clientX-rect.left,e.clientY-rect.top]);
+        selectPoint(point.lat,point.lng,'Titik peta');
+      },{passive:true});
+
+      leafletMap.on('click',function(e){
+        // Desktop mouse click. Pointer fallback above handles mobile taps.
+        if(e.originalEvent && e.originalEvent.pointerType==='touch')return;
+        selectPoint(e.latlng.lat,e.latlng.lng,'Titik peta');
+      });
       setTimeout(()=>leafletMap.invalidateSize(),150);
     }
 
@@ -83,7 +110,7 @@
         const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=id&lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon);
         const r=await fetch(url); if(!r.ok)throw new Error('reverse');
         const data=await r.json();
-        const label=data.display_name||('%.5f, %.5f').replace('%.5f',lat).replace('%.5f',lon);
+        const label=data.display_name||('Lokasi '+lat.toFixed(5)+', '+lon.toFixed(5));
         if(marker)marker.bindPopup(label).openPopup();
       }catch(_){ }
     }
@@ -103,8 +130,10 @@
         lastLocation={lat,lon};
         setPoint(lat,lon,'Lokasi saya',16);
         if(!accuracyCircle)accuracyCircle=L.circle([lat,lon],{radius:pos.coords.accuracy||20,weight:1,fillOpacity:.08}).addTo(leafletMap); else accuracyCircle.setLatLng([lat,lon]).setRadius(pos.coords.accuracy||20);
-        document.getElementById('map-speed-final').textContent=Math.round(speed)+' km/h';
-        document.getElementById('map-distance-final').textContent=distanceKm.toFixed(2)+' km';
+        const speedEl=document.getElementById('map-speed-final');
+        const distanceEl=document.getElementById('map-distance-final');
+        if(speedEl)speedEl.textContent=Math.round(speed)+' km/h';
+        if(distanceEl)distanceEl.textContent=distanceKm.toFixed(2)+' km';
         setStatus('GPS LIVE');
       },function(){setStatus('GPS ERROR');},{enableHighAccuracy:true,maximumAge:2000,timeout:10000});
     }
