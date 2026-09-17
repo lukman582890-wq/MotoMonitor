@@ -53,12 +53,16 @@
     }
 
     const buttons=[...nav.querySelectorAll('button')];
+    // Do not depend on button position. Find the actual MAP/DASHBOARD labels.
+    const buttonLabel=(button)=>button.textContent.replace(/\s+/g,' ').trim().toUpperCase();
+    const mapButton=buttons.find(b=>buttonLabel(b).includes('MAP')) || buttons[1];
+    const dashboardButton=buttons.find(b=>buttonLabel(b).includes('DASHBOARD')) || buttons[0];
     let leafletMap=null, marker=null, accuracyCircle=null, watchId=null, lastLocation=null, distanceKm=0;
 
     function dashboardView(e){
       if(e){e.preventDefault();e.stopPropagation();}
       dashboard.classList.add('active'); map.classList.remove('active');
-      buttons.forEach((b,i)=>b.classList.toggle('active',i===0));
+      buttons.forEach(b=>b.classList.toggle('active',b===dashboardButton));
       history.replaceState(null,'','#dashboard'); window.scrollTo(0,0);
     }
 
@@ -71,8 +75,6 @@
       leafletMap=L.map(el,{zoomControl:true,attributionControl:true,tap:true,dragging:true,touchZoom:true}).setView([-6.2,106.82],12);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(leafletMap);
 
-      // Native pointer fallback: makes a tap/click select a point even on mobile WebViews.
-      // A small movement is treated as a tap; a drag remains normal Leaflet panning.
       let down=null;
       el.addEventListener('pointerdown',function(e){
         if(e.target.closest('.leaflet-control')){down=null;return;}
@@ -90,7 +92,6 @@
       },{passive:true});
 
       leafletMap.on('click',function(e){
-        // Desktop mouse click. Pointer fallback above handles mobile taps.
         if(e.originalEvent && e.originalEvent.pointerType==='touch')return;
         selectPoint(e.latlng.lat,e.latlng.lng,'Titik peta');
       });
@@ -165,15 +166,16 @@
     function mapView(e){
       if(e){e.preventDefault();e.stopPropagation();}
       dashboard.classList.remove('active'); map.classList.add('active');
-      buttons.forEach((b,i)=>b.classList.toggle('active',i===1));
+      buttons.forEach(b=>b.classList.toggle('active',b===mapButton));
       history.replaceState(null,'','#map'); window.scrollTo(0,0);
       loadLeaflet(()=>{initMap();setTimeout(()=>leafletMap&&leafletMap.invalidateSize(),100);});
     }
 
-    buttons.forEach((button,index)=>{
-      const action=index===1?mapView:index===0?dashboardView:null;
-      if(action){button.addEventListener('pointerup',action);button.addEventListener('touchend',action,{passive:false});button.addEventListener('click',action);}
-    });
+    // Attach exactly one activation handler to each navigation target.
+    // This avoids pointerup + touchend + click firing the action multiple times.
+    if(dashboardButton)dashboardButton.addEventListener('click',dashboardView);
+    if(mapButton)mapButton.addEventListener('click',mapView);
+
     map.querySelector('.map-menu').addEventListener('click',dashboardView);
     map.querySelector('.map-locate-top').addEventListener('click',()=>{mapView();setTimeout(startGps,250);});
     map.querySelector('#map-current-final').addEventListener('click',startGps);
