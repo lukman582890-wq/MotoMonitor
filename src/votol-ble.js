@@ -38,7 +38,7 @@ export class VotolBleProtocol{
   snapshot(){return {connected:this.connected,deviceId:this.deviceId,name:this.deviceName,service:VOTOL_SERVICE,writeChar:this.writeChar,notifyChar:this.notifyChar,params:Object.fromEntries(this.params)}}
   async connect(){
     await BleClient.initialize();
-    const d=await BleClient.requestDevice({acceptAllDevices:true,optionalServices:[VOTOL_SERVICE]});
+    const d=await BleClient.requestDevice({namePrefix:'VOTOL',optionalServices:[VOTOL_SERVICE]});
     this.deviceId=d.deviceId; this.deviceName=d.name||d.deviceId;
     await BleClient.connect(this.deviceId,()=>this.handleDisconnect());
     const services=await BleClient.getServices(this.deviceId);
