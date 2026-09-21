@@ -2,6 +2,7 @@ import './style.css';
 import './dashboard.css';
 import { BleClient } from '@capacitor-community/bluetooth-le';
 import { Capacitor } from '@capacitor/core';
+import { VotolBleProtocol } from './votol-ble.js';
 
 const SPP = Capacitor.registerPlugin('BluetoothSerial');
 const BMS_SERVICE='0000ffe0-0000-1000-8000-00805f9b34fb';
@@ -19,10 +20,45 @@ function parse57(b){if(b.length<20||b[0]!=78||b[1]!=87)return;let p=10,end=b.len
 function jkData(data){jb=join(jb,Uint8Array.from(data));while(jb.length>=4){let s=-1;for(let i=0;i<jb.length-1;i++)if((jb[i]==85&&jb[i+1]==170)||(jb[i]==78&&jb[i+1]==87)){s=i;break}if(s<0){jb=jb.slice(-3);return}if(s)jb=jb.slice(s);if(jb[0]==85){if(jb.length<150)return;parse55(jb.slice(0,150));jb=jb.slice(150)}else{const len=jb[2]<<8|jb[3];if(len<20||jb.length<len)return;parse57(jb.slice(0,len));jb=jb.slice(len)}render()}}
 async function connectBms(){try{if(st.bms.connected){await BleClient.disconnect(st.bms.id);st.bms.connected=false;render();return}await BleClient.initialize();const d=await BleClient.requestDevice({acceptAllDevices:true,optionalServices:[BMS_SERVICE]});st.bms.id=d.deviceId;st.bms.name=d.name||d.deviceId;await BleClient.connect(d.deviceId,()=>{st.bms.connected=false;render()});await BleClient.startNotifications(d.deviceId,BMS_SERVICE,BMS_CHAR,v=>jkData(Array.from(new Uint8Array(v.buffer,v.byteOffset,v.byteLength))));st.bms.connected=true;jb=new Uint8Array(0);render();for(const cmd of [0x96,0x95]){const q=new Uint8Array(20);q.set([170,85,144,235,cmd]);let sum=0;for(let i=0;i<19;i++)sum=(sum+q[i])&255;q[19]=sum;await BleClient.writeWithoutResponse(d.deviceId,BMS_SERVICE,BMS_CHAR,new DataView(q.buffer)).catch(()=>{});await new Promise(r=>setTimeout(r,300))}}catch(e){st.bms.connected=false;render();toast(`JK BMS: ${e?.message||e}`)}}
 let vb=new Uint8Array(0),poll,rawListener,statusListener;function votolData(data){vb=join(vb,Uint8Array.from(data));while(vb.length>=24){let s=-1;for(let i=0;i<=vb.length-24;i++)if(vb[i]==192&&vb[i+1]==20){s=i;break}if(s<0){vb=vb.slice(-23);return}if(s)vb=vb.slice(s);const b=vb.slice(0,24),v=(b[5]<<8|b[6])/10;let ir=b[7]<<8|b[8];if(ir&32768)ir-=65536;const states=['IDLE','INIT','START','RUN','STOP','BRAKE','WAIT','FAULT'];st.ctrl.voltage=v;st.ctrl.current=ir/10;st.ctrl.rpm=b[14]<<8|b[15];st.ctrl.temp=b[16]-50;st.ctrl.extTemp=b[17]-50;st.ctrl.status=states[b[21]]||`ST:${b[21]}`;vb=vb.slice(24);render()}}
+let votolBle=null;
+function initVotolBle(){
+  if(votolBle)return votolBle;
+  votolBle=new VotolBleProtocol({
+    onLog:msg=>toast(msg),
+    onRaw:(label,data)=>{
+      if(window.MotoMonitor?.logRaw) window.MotoMonitor.logRaw(label,data);
+    },
+    onState:s=>{
+      st.ctrl.connected=!!s.connected;
+      if(s.connected){st.ctrl.id=s.deviceId;st.ctrl.name=s.name||s.deviceId;st.ctrl.transport='BLE'}
+      else if(st.ctrl.transport==='BLE'){st.ctrl.name='';st.ctrl.id='';st.ctrl.transport=''}
+      render();
+    },
+    onData:d=>{
+      if(d.kind==='live'){
+        Object.assign(st.ctrl,{voltage:d.voltage,current:d.current,rpm:d.rpm,temp:d.controllerTemp,extTemp:d.externalTemp,status:d.status});
+        render();
+      }else if(d.kind==='parameter'){
+        if(!st.ctrl.params)st.ctrl.params={};
+        st.ctrl.params[d.page]=d.payload;
+      }
+    }
+  });
+  return votolBle;
+}
+async function connectVotolBle(){
+  try{
+    const v=initVotolBle();
+    if(v.connected){await v.disconnect();return}
+    await v.connect();
+    toast('VOTOL BLE protocol active');
+  }catch(e){st.ctrl.connected=false;render();toast(`VOTOL BLE: ${e?.message||e}`)}
+}
+
 function picker(devices){const list=$('#picker-list');list.innerHTML=devices.length?'':'<div class="empty-device">No paired Bluetooth devices found.</div>';devices.forEach(d=>{const b=document.createElement('button');b.className='device-option';b.innerHTML=`<strong>${d.name||'Unnamed device'}</strong><span>${d.id||d.address||''}</span>`;b.onclick=()=>{$('#device-picker').classList.add('hidden');connectVotol(d)};list.appendChild(b)});$('#device-picker').classList.remove('hidden')}
 async function connectVotol(d){try{st.ctrl.id=d.id||d.address;st.ctrl.name=d.name||st.ctrl.id;if(rawListener)await rawListener.remove().catch(()=>{});if(statusListener)await statusListener.remove().catch(()=>{});rawListener=await SPP.addListener('rawData',e=>votolData(e.data||[]));statusListener=await SPP.addListener('status',e=>{st.ctrl.connected=!!e.connected;if(e.name)st.ctrl.name=e.name;render()});await SPP.connectInsecure({id:st.ctrl.id});st.ctrl.connected=true;vb=new Uint8Array(0);render();await SPP.write({data:SHOW});clearInterval(poll);poll=setInterval(()=>SPP.write({data:SHOW}).catch(()=>{}),200)}catch(e){st.ctrl.connected=false;render();toast(`VOTOL SPP: ${e?.message||e}`)}}
 async function controller(){try{if(Capacitor.getPlatform()!=='android')return toast('VOTOL Classic SPP tersedia di Android APK');if(st.ctrl.connected){clearInterval(poll);await SPP.disconnect().catch(()=>{});st.ctrl.connected=false;render();return}const r=await SPP.list();picker((r?.devices||[]).filter(x=>x&&(x.id||x.address)))}catch(e){toast(`VOTOL: ${e?.message||e}`)}}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(toast.timer);toast.timer=setTimeout(()=>t.classList.add('hidden'),1800)}
 document.addEventListener('click',e=>{const m=e.target.closest('[data-mode]');if(m){const a=['ECO','NORMAL','SPORT'];let i=a.indexOf(st.mode)+(m.dataset.mode==='next'?1:-1);st.mode=a[(i+a.length)%a.length];render()}const p=e.target.closest('[data-page]');if(p){document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.remove('active'));p.classList.add('active');if(p.dataset.page==='bms')connectBms();else if(p.dataset.page==='votol')controller();else if(p.dataset.page!=='dashboard')toast(`${p.dataset.page.toUpperCase()} module — shell ready`)}});
-$('#settings').onclick=()=>toast('Settings module — shell ready');$('#play').onclick=()=>toast('Media player bridge ready');$('#picker-close').onclick=()=>$('#device-picker').classList.add('hidden');$('#picker-refresh').onclick=()=>controller();
-window.MotoMonitor={state:st,setGps(data){Object.assign(st.gps,data,{connected:true});render()},connectBms,connectVotol:controller};render();
+$('#connect-votol-ble').onclick=connectVotolBle; $('#connect-votol-spp').onclick=controller; $('#settings').onclick=()=>toast('Settings module — shell ready');$('#play').onclick=()=>toast('Media player bridge ready');$('#picker-close').onclick=()=>$('#device-picker').classList.add('hidden');$('#picker-refresh').onclick=()=>controller();
+window.MotoMonitor={state:st,setGps(data){Object.assign(st.gps,data,{connected:true});render()},connectBms,connectVotol:controller,connectVotolBle,logRaw:(label,data)=>{const h=Array.from(data||[]).map(v=>v.toString(16).padStart(2,'0').toUpperCase()).join(' ');if(st.log){} console.debug(label,h)}};render();
