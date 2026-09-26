@@ -7,12 +7,21 @@ fs.copyFileSync(path.join(root,'native/BluetoothSerialPlugin.java'),path.join(pk
 fs.copyFileSync(path.join(root,'native/GPSNativePlugin.java'),path.join(pkg,'GPSNativePlugin.java'));
 fs.writeFileSync(path.join(pkg,'MainActivity.java'),`package com.lukman.motomonitor;
 import android.os.Bundle;
+import android.Manifest;
+import android.os.Build;
+import android.content.pm.PackageManager;
 import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
  @Override public void onCreate(Bundle savedInstanceState){
   registerPlugin(BluetoothSerialPlugin.class);
   registerPlugin(GPSNativePlugin.class);
   super.onCreate(savedInstanceState);
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+   if (checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED ||
+       checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+    requestPermissions(new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT}, 7001);
+   }
+  }
  }
 }
 `);
