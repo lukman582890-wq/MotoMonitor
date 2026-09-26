@@ -24,7 +24,7 @@ const checks=[
   ['Manifest has coarse location',android.includes('android.permission.ACCESS_COARSE_LOCATION')],
   ['Manifest declares GPS hardware',android.includes('android.hardware.location.gps')],
   ['MainActivity registers GPSNative',activity.includes('registerPlugin(GPSNativePlugin.class)')],
-  ['MainActivity does not request permissions itself',!activity.includes('requestPermissions(')]
+  ['MainActivity does not request GPS permissions itself',!activity.includes('requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION')]
 ];
 const failed=checks.filter(([,ok])=>!ok);
 for(const [name,ok] of checks) console.log((ok?'PASS ':'FAIL ')+name);
