@@ -52,7 +52,9 @@ jobs:
       - name: Inject native Bluetooth transport
         run: node scripts/patch-android.mjs
       - name: Verify GPS integration
-        run: node scripts/verify-gps-build.mjs || echo "GPS verification reported issues; continuing APK build."
+        run: node scripts/verify-gps-build.mjs
+      - name: Verify transport integration
+        run: node scripts/verify-transport-build.mjs
       - name: Sync Capacitor
         run: npx cap sync android
       - name: Build debug APK
