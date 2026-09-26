@@ -33,7 +33,7 @@ function parseJK02(frame){
   st.bms.temp=Number.isFinite(temp)&&temp>-100&&temp<150?temp:null;
   st.bms.soc=soc<=100?soc:null;
   st.bms.delta=Math.max(...cells)-Math.min(...cells);
-  log(`JK DATA: ${cells.length}S | ${st.bms.voltage.toFixed(3)}V | ${st.bms.current==null?'--':st.bms.current.toFixed(3)+'A'} | SOC ${st.bms.soc==null?'--':st.bms.soc+'%'} | Δ ${st.bms.delta.toFixed(3)}V`);
+  log('JK DATA: '+cells.length+'S | '+st.bms.voltage.toFixed(3)+'V | '+(st.bms.current==null?'--':st.bms.current.toFixed(3)+'A')+' | SOC '+(st.bms.soc==null?'--':st.bms.soc+'%')+' | Δ '+st.bms.delta.toFixed(3)+'V);
   return true;
 }
 function parseJK04(frame){
@@ -43,7 +43,7 @@ function parseJK04(frame){
   for(let i=0;i<24;i++){const v=dv.getFloat32(6+i*4,true);if(Number.isFinite(v)&&v>=1.5&&v<=5)cells.push(v);else break}
   if(!cells.length)return false;
   st.bms.cells=cells;st.bms.voltage=cells.reduce((a,x)=>a+x,0);st.bms.delta=Math.max(...cells)-Math.min(...cells);
-  log(`JK DATA JK04: ${cells.length}S | ${st.bms.voltage.toFixed(3)}V | Δ ${st.bms.delta.toFixed(3)}V`);
+  log('JK DATA JK04: '+cells.length+'S | '+st.bms.voltage.toFixed(3)+'V | Δ '+st.bms.delta.toFixed(3)+'V);
   return true;
 }
 function parseJKInfo(frame){
