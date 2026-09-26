@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 const file='src/main.js'; let s=fs.readFileSync(file,'utf8');
-const SHOW_PACKET=[201,20,2,83,72,79,87,0,0,0,0,0,170,0,0,0,24,170,0,0,0,0,196,13];\nconst html=`<main class="app-shell">
+const html=`<main class="app-shell">
 <header class="topbar"><div class="brand"><h1>Moto<span>Monitor</span></h1><p>BMS • CONTROLLER • GPS</p></div><div class="top-actions"><span id="app-status" class="status-pill">READY</span><button id="settings-btn" class="icon-btn">⚙</button></div></header>
 <section class="connect-row"><button id="connect-bms" class="connect-card"><span class="device-icon battery-icon">▣</span><span><b>JK BMS</b><small id="bms-name">Not Connected</small></span><i>›</i></button><button id="connect-controller" class="connect-card"><span class="device-icon controller-icon">▦</span><span><b>VOTOL SPP</b><small id="ctrl-name">Not Connected</small></span><i>›</i></button></section>
 <section class="speed-panel"><div class="gauge"><div class="gauge-ring"></div><div class="gauge-labels"><span>0</span><span>20</span><span>40</span><span>60</span><span>80</span><span>100</span><span>120</span><span>140</span></div><div class="gauge-value"><strong id="speed">0</strong><span>KM/H</span><small id="odo">00063<br><em>Km</em></small></div></div></section>
