@@ -15,6 +15,7 @@ const SHOW_PACKET=[201,20,2,83,72,79,87,0,0,0,0,0,170,0,0,0,30,170,4,103,0,243,8
 <div id="device-picker" class="device-picker hidden"><div class="picker-panel"><div class="picker-head"><div><h2 id="picker-title">Select Bluetooth device</h2><p id="picker-subtitle">Choose a device.</p></div><button class="secondary" id="picker-close">Cancel</button></div><div id="picker-list" class="picker-list"></div><button class="secondary picker-refresh" id="picker-refresh">Refresh devices</button></div></div></main>`;
 if(!/app\.innerHTML=`[\s\S]*?`;/.test(s)) throw new Error('UI block not found');
 s=s.replace(/app\.innerHTML=`[\s\S]*?`;/,'app.innerHTML=`'+html.replace(/`/g,'\\`')+'`;');
+s=s.replace(/const SHOW=\[[^\]]+\]/,'const SHOW=[201,20,2,83,72,79,87,0,0,0,0,0,170,0,0,0,30,170,4,103,0,243,82,13]');
 const extra=`
 const __baseRender=render; let __range=Number(localStorage.getItem('mm_range')||80),__factor=Number(localStorage.getItem('mm_factor')||0.144),__tripStart=Date.now(),__tripKm=Number(localStorage.getItem('mm_trip')||0);
 let __gps={lat:null,lon:null,alt:null,accuracy:null}; let __map=null,__mapBig=null,__marker=null,__markerBig=null,__accuracy=null,__accuracyBig=null,__gpsReady=false,__lastGpsError='';
